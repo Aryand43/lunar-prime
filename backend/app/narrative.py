@@ -86,7 +86,7 @@ def build(
         short_txt = "none (continuous)" if s_d == 0 else fmt_duration(s_d)
         stmts.append(Statement(
             id=key, kind="comparison", favors=short_id,
-            text=f"{short} has the shorter longest {noun}: {short_txt} vs {_gap_str(l_d, l_lb)} at {long_}.",
+            text=f"{short}'s longest {noun} is shorter: {short_txt}, against {_gap_str(l_d, l_lb)} at {long_}.",
         ))
         decisive[key] = (f"{short} has {headline}", short_id)
 
@@ -97,8 +97,8 @@ def build(
                    "more Earth visibility")
     more_is_better("both_duration", "simultaneous sunlight and Earth visibility", a.both_duration_s,
                    a.both_fraction, b.both_duration_s, b.both_fraction, "more simultaneous sunlight and Earth visibility")
-    shorter_gap_is_better("sun_gap", "period without sunlight", a.sun, b.sun, "a shorter maximum period without sunlight")
-    shorter_gap_is_better("earth_gap", "period without Earth visibility", a.earth, b.earth,
+    shorter_gap_is_better("sun_gap", "night", a.sun, b.sun, "a shorter maximum period without sunlight")
+    shorter_gap_is_better("earth_gap", "Earth outage", a.earth, b.earth,
                           "a shorter maximum Earth-visibility gap")
 
     # Observations: absolute conditions, stated per site.
@@ -120,8 +120,7 @@ def build(
                 stmts.append(Statement(
                     id=f"{sid}_{body}_horizon", kind="caveat", favors=None,
                     text=f"At {label}, {name} is within ±{config.NEAR_HORIZON_DEG:.0f}° of the ideal horizon for about "
-                         f"{_pct(bm.near_horizon_fraction)} of the window, so local terrain and the finite disc "
-                         "could change these visibility results substantially.",
+                         f"{_pct(bm.near_horizon_fraction)} of the window, so real terrain could change this result.",
                 ))
 
     order = ["sun_duration", "earth_gap", "earth_duration", "sun_gap", "both_duration"]
@@ -129,5 +128,5 @@ def build(
     if not picks:
         headline = "The two sites perform similarly on these criteria during this window."
     else:
-        headline = "; ".join(picks) + "."
+        headline = ". ".join(picks) + "."
     return headline, stmts, tol
