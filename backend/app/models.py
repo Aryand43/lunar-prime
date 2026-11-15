@@ -11,6 +11,15 @@ from . import config
 from .geometry import normalize_lon
 
 
+def _check_utc(v: datetime) -> datetime:
+    """Shared validator: an aware datetime in UTC (offset +00:00 or 'Z')."""
+    if v.tzinfo is None:
+        raise ValueError("start_utc must include a UTC designator, e.g. '2026-12-01T00:00:00Z'")
+    if v.utcoffset() != timezone.utc.utcoffset(None):
+        raise ValueError("start_utc must be in UTC (offset +00:00 or 'Z')")
+    return v.astimezone(timezone.utc)
+
+
 class SiteInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -18,6 +27,14 @@ class SiteInput(BaseModel):
     label: str = Field(..., min_length=1, max_length=64)
     lat_deg: float = Field(..., ge=-90.0, le=90.0, description="Planetocentric latitude, degrees")
     lon_deg: float = Field(..., ge=-180.0, le=360.0, description="East-positive longitude, degrees")
+    start_utc: Optional[datetime] = Field(
+        None, description="This scenario's start (ISO 8601 UTC). None means the request's start_utc."
+    )
+    horizon_key: Optional[str] = Field(
+        None, max_length=64, pattern=r"^[A-Za-z0-9\-]+$",
+        description="Preset key of a precomputed terrain skyline. Ignored if no such file exists, in synthetic mode, "
+                    "or if the coordinates differ from the preset's.",
+    )
 
     @field_validator("label")
     @classmethod
@@ -32,31 +49,30 @@ class SiteInput(BaseModel):
     def _norm_lon(cls, v: float) -> float:
         return normalize_lon(v)
 
+    @field_validator("start_utc")
+    @classmethod
+    def _utc(cls, v: Optional[datetime]) -> Optional[datetime]:
+        return None if v is None else _check_utc(v)
+
 
 class CompareRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    sites: list[SiteInput] = Field(..., min_length=1, max_length=4)
+    sites: list[SiteInput] = Field(..., min_length=2, max_length=2)
     start_utc: datetime = Field(..., description="ISO 8601 UTC start, e.g. 2026-12-01T00:00:00Z")
     duration_hours: float = Field(..., ge=config.MIN_DURATION_HOURS, le=config.MAX_DURATION_HOURS)
     step_minutes: float = Field(..., ge=config.MIN_STEP_MINUTES, le=config.MAX_STEP_MINUTES)
     mode: Literal["spice", "synthetic"] = "spice"
-    terrain: bool = Field(False, description="Use the LOLA terrain horizon where the south-polar DEM covers a site")
 
     @field_validator("start_utc")
     @classmethod
     def _utc(cls, v: datetime) -> datetime:
-        if v.tzinfo is None:
-            raise ValueError("start_utc must include a UTC designator, e.g. '2026-12-01T00:00:00Z'")
-        if v.utcoffset() != timezone.utc.utcoffset(None):
-            raise ValueError("start_utc must be in UTC (offset +00:00 or 'Z')")
-        return v.astimezone(timezone.utc)
+        return _check_utc(v)
 
     @model_validator(mode="after")
     def _check(self) -> "CompareRequest":
-        ids = [s.id for s in self.sites]
-        if len(set(ids)) != len(ids):
-            raise ValueError("site ids must be unique")
+        if self.sites[0].id == self.sites[1].id:
+            raise ValueError("the two sites must have different ids")
         n = int(self.duration_hours * 60.0 // self.step_minutes) + 2
         if n > config.MAX_SAMPLES:
             raise ValueError(
@@ -109,6 +125,22 @@ class SiteMetrics(BaseModel):
     both_fraction: float
 
 
+class SubPoints(BaseModel):
+    subsolar_lat_deg: list[float]
+    subsolar_lon_deg: list[float]
+    sub_earth_lat_deg: list[float]
+    sub_earth_lon_deg: list[float]
+    earth_distance_km: list[float]
+
+
+class HorizonOut(BaseModel):
+    az_deg: list[float]
+    el_deg: list[float] = Field(..., description="Skyline elevation angle (deg) above the local horizontal")
+    site_height_m: float = Field(..., description="Surface height above the 1737.4 km sphere")
+    observer_height_m: float
+    source: str
+
+
 class SiteResult(BaseModel):
     id: str
     label: str
@@ -120,16 +152,11 @@ class SiteResult(BaseModel):
     masks: dict[str, list[bool]]  # sun, earth, both (sample-wise, elevation > 0)
     intervals: dict[str, list[IntervalOut]]  # sun, earth, both (refined)
     metrics: SiteMetrics
-    terrain: dict = Field(default_factory=lambda: {"applied": False},
-                          description="Terrain horizon used for this site (profile, source, limits) or why not")
-
-
-class SubPoints(BaseModel):
-    subsolar_lat_deg: list[float]
-    subsolar_lon_deg: list[float]
-    sub_earth_lat_deg: list[float]
-    sub_earth_lon_deg: list[float]
-    earth_distance_km: list[float]
+    start_utc: str = Field(..., description="This scenario's window start (UTC)")
+    timestamps_utc: list[str] = Field(..., description="This scenario's sample times (UTC)")
+    subpoints: SubPoints = Field(..., description="Subsolar and sub-Earth points at this scenario's sample times")
+    model: Literal["terrain", "sphere"] = Field(..., description="Horizon model used for this site")
+    horizon: Optional[HorizonOut] = Field(None, description="Terrain skyline when model is 'terrain'")
 
 
 class Statement(BaseModel):
@@ -160,6 +187,7 @@ class Metadata(BaseModel):
     window_start_utc: str
     window_end_utc: str
     window_duration_s: float
+    starts_differ: bool = Field(..., description="True when the two sites use different start times")
     step_s: float
     n_samples: int
     refinement_tolerance_s: float

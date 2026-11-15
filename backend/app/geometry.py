@@ -133,6 +133,8 @@ class SyntheticProvider:
         return r * np.column_stack([np.cos(lat) * np.cos(lon), np.cos(lat) * np.sin(lon), np.sin(lat)])
 
 
+
+
 # --- Vectorised helpers (used by the route planner; compare uses the scalar forms above) ---
 
 

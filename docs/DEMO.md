@@ -2,27 +2,23 @@
 
 **Problem (10 s).** Landing near the lunar south pole depends on two things at the site: sunlight for power
 and a direct line of sight to Earth for communication. The Sun and Earth skim the horizon there, so crater
-walls and ridges decide who gets light and signal.
+rims and ridges decide who gets light and signal.
 
-**1. Compare sites (35 s).** Open the Site Navigator. Three sites are preloaded for one lunar day: IM-2
-Athena on Mons Mouton, Chandrayaan-3 and Apollo 11 as an equatorial reference.
-- Point at the scorecards: sunlight share and longest night (power), Earth-in-view share and longest blackout
-  (direct-to-Earth), and both together. "Best" appears only when the difference is real.
-- Press play: the globe lighting, each site's sky view and the window strips move together.
+**1. The answer first (30 s).** The app opens on the Shackleton rim against IM-2 at Mons Mouton for one
+lunar month. Read the two-sentence headline, then the metrics: sunlight share and longest night (power),
+Earth-contact share and longest Earth outage (direct-to-Earth). With "Explain" on, each number has a plain
+sentence under it.
 
-**2. Real terrain (30 s).** Show the brown skyline in IM-2's sky view: it is computed from NASA's LOLA laser
-altimetry. Add "Shackleton" by pasting `-89.67, 129.78`: with terrain on it gets 0% sunlight, because its
-floor is permanently shadowed. An ideal-horizon tool would claim about 50%. Note that high ground (IM-2 on
-Mons Mouton) sees Earth more often than the flat-ground horizon suggests.
+**2. Real terrain (35 s).** Point at the sky plots: the grey skyline is computed from NASA's LOLA 80 m
+elevation map. Press play and watch the Sun skim the real ridgeline. In "Why this matters", press "See it" to
+put the rim beside the crater floor 10.8 km away: the rim keeps the Sun up for the whole month, the floor
+gets 0% sunlight, as a permanently shadowed floor should. An ideal-horizon tool would give both about half.
 
-**3. Find the best dates (30 s).** In "Find the best landing dates", choose IM-2, 1 year, Power + comms, and
-press Find dates. The chart shows the seasonal pattern; the top windows cluster in September to November 2027.
-Click Compare on #1 and Update comparison to get refined (1 s) numbers next to the original date.
+**3. Dates, not only places (25 s).** Tick "Site B starts on a different date", choose "Same place as A" and
+give B a later start. The findings, metrics and timelines now compare one site on two dates.
 
-**4. Share (10 s).** Press "Copy shareable link": anyone opening it sees the same comparison.
+**4. Details on demand (15 s).** Hover a sky plot, countdown or metric for a short explanation; open the list
+of every sunlight and Earth-contact window; export the full result as JSON.
 
-**Credibility (5 s).** Sun and Earth positions come from NASA/JPL SPICE (DE440), terrain from LRO LOLA, and
-site coordinates from NASA NSSDCA, each cited in the app. Limitations are stated on screen.
-
-Optional extras if time allows: the Route simulator (plan a traverse from anywhere to the South Pole) and the
-mission analyst (ask "Why is this route longer than the baseline?").
+**Credibility (5 s).** Sun and Earth positions come from NASA/JPL SPICE (DE440), terrain from LRO LOLA
+(PGDA product 90), and the method, limitations and kernel hashes are shown in the Method section.

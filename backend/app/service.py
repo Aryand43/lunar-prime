@@ -2,18 +2,21 @@
 
 from __future__ import annotations
 
+import json
 import math
 import time
 from datetime import datetime, timezone
+from functools import lru_cache
 
 import numpy as np
 
-from . import analysis, config, kernels, narrative, terrain
-from .geometry import EphemerisProvider, enu_basis, site_vector, sub_point, topocentric_az_el
+from . import analysis, config, kernels, narrative
+from .geometry import EphemerisProvider, enu_basis, normalize_lon, site_vector, sub_point, topocentric_az_el
 from .models import (
-    AzEl, BodyMetrics, Comparison, CompareRequest, CompareResponse, GapOut, IntervalOut,
-    KernelOut, Metadata, SiteMetrics, SiteResult, SubPoints,
+    AzEl, BodyMetrics, Comparison, CompareRequest, CompareResponse, GapOut, HorizonOut, IntervalOut,
+    KernelOut, Metadata, SiteInput, SiteMetrics, SiteResult, SubPoints,
 )
+from .terrain import skyline_at
 
 
 class ComputeError(ValueError):
@@ -32,18 +35,63 @@ def sample_times(et0: float, duration_s: float, step_s: float) -> np.ndarray:
     return ets
 
 
-def terrain_for(lat_deg: float, lon_deg: float, requested: bool):
-    """(Horizon or None, summary dict) for a site; never raises."""
-    if not requested:
-        return None, {"applied": False, "reason": "Ideal horizon (terrain not requested)."}
-    if not terrain.available():
-        return None, {"applied": False, "reason": "Terrain data not installed (run scripts/fetch_terrain.sh); "
-                                                  "ideal horizon used."}
-    if not terrain.covers(lat_deg):
-        return None, {"applied": False, "reason": "Outside the LOLA south-polar DEM (60°S to the pole); "
-                                                  "ideal horizon used."}
-    hz = terrain.horizon(round(lat_deg, 5), round(lon_deg, 5))
-    return hz, hz.summary()
+@lru_cache(maxsize=64)
+def _read_horizon(path: str, mtime: float) -> dict:
+    with open(path) as f:
+        return json.load(f)
+
+
+def load_horizon(site: SiteInput, mode: str) -> dict | None:
+    """The precomputed skyline for a site, or None (smooth sphere).
+
+    None when: no key, synthetic mode, no file for the key, or the coordinates were edited away from the
+    preset's (more than config.HORIZON_MATCH_DEG in latitude or longitude).
+    """
+    if not site.horizon_key or mode != "spice":
+        return None
+    path = config.HORIZON_DIR / f"{site.horizon_key}.json"
+    if not path.is_file():
+        return None
+    hz = _read_horizon(str(path), path.stat().st_mtime)
+    dlat = abs(site.lat_deg - hz["lat_deg"])
+    dlon = abs(normalize_lon(site.lon_deg - hz["lon_deg"]))
+    if dlat > config.HORIZON_MATCH_DEG or dlon > config.HORIZON_MATCH_DEG:
+        return None
+    return hz
+
+
+class _Scenario:
+    """Sample times, body vectors and sub-points for one window start. Shared when both sites use the same start."""
+
+    def __init__(self, provider: EphemerisProvider, start: datetime, duration_s: float, step_s: float):
+        self.start = start
+        self.et0 = provider.utc_to_et(start)
+        self.et1 = self.et0 + duration_s
+        if provider.mode == "spice":
+            if self.et0 < kernels.STATUS.coverage_start_et or self.et1 > kernels.STATUS.coverage_end_et:
+                raise ComputeError(
+                    f"The window must lie within the loaded kernel coverage "
+                    f"({kernels.STATUS.coverage_start_utc} to {kernels.STATUS.coverage_end_utc})."
+                )
+        self.ets = sample_times(self.et0, duration_s, step_s)
+        if len(self.ets) > config.MAX_SAMPLES:
+            raise ComputeError(f"{len(self.ets):,} samples exceeds the limit of {config.MAX_SAMPLES:,}")
+        self.body_vecs = {b: provider.body_vectors(b, self.ets) for b in config.BODIES}
+        ss_lat, ss_lon, _ = sub_point(self.body_vecs["sun"])
+        se_lat, se_lon, e_dist = sub_point(self.body_vecs["earth"])
+        self.subpoints = SubPoints(
+            subsolar_lat_deg=_r(ss_lat, 4), subsolar_lon_deg=_r(ss_lon, 4),
+            sub_earth_lat_deg=_r(se_lat, 4), sub_earth_lon_deg=_r(se_lon, 4),
+            earth_distance_km=_r(e_dist, 1),
+        )
+        self.timestamps = provider.et_to_utc(self.ets)
+
+
+def _start_label(start: datetime, other: datetime) -> str:
+    """Date for narrative labels; adds the time of day when both starts fall on the same date."""
+    if start.date() == other.date():
+        return start.strftime("%Y-%m-%d %H:%M UTC")
+    return start.strftime("%Y-%m-%d")
 
 
 def run_compare(req: CompareRequest, provider: EphemerisProvider) -> CompareResponse:
@@ -51,55 +99,60 @@ def run_compare(req: CompareRequest, provider: EphemerisProvider) -> CompareResp
     duration_s = req.duration_hours * 3600.0
     step_s = req.step_minutes * 60.0
 
-    et0 = provider.utc_to_et(req.start_utc)
-    et1 = et0 + duration_s
-    if provider.mode == "spice":
-        if et0 < kernels.STATUS.coverage_start_et or et1 > kernels.STATUS.coverage_end_et:
-            raise ComputeError(
-                f"The window must lie within the loaded kernel coverage "
-                f"({kernels.STATUS.coverage_start_utc} to {kernels.STATUS.coverage_end_utc})."
-            )
-
-    ets = sample_times(et0, duration_s, step_s)
-    if len(ets) > config.MAX_SAMPLES:
-        raise ComputeError(f"{len(ets):,} samples exceeds the limit of {config.MAX_SAMPLES:,}")
-
-    body_vecs = {b: provider.body_vectors(b, ets) for b in config.BODIES}
-    ss_lat, ss_lon, _ = sub_point(body_vecs["sun"])
-    se_lat, se_lon, e_dist = sub_point(body_vecs["earth"])
+    # One scenario per distinct start. When both sites use the request's start (the usual case),
+    # the geometry is computed once, so such requests cost the same as before scenarios existed.
+    starts = [site.start_utc or req.start_utc for site in req.sites]
+    scenarios: dict[datetime, _Scenario] = {}
+    for st in starts:
+        if st not in scenarios:
+            scenarios[st] = _Scenario(provider, st, duration_s, step_s)
+    starts_differ = len(scenarios) > 1
 
     def to_utc(et: float) -> str:
         return provider.et_to_utc(np.array([et]))[0]
 
-    def interval_out(iv: list[tuple[float, float]]) -> list[IntervalOut]:
-        return [
-            IntervalOut(
-                start_utc=to_utc(s), end_utc=to_utc(e), duration_s=round(e - s, 1),
-                starts_at_window_start=s <= et0, ends_at_window_end=e >= et1,
-            )
-            for s, e in iv
-        ]
-
     n_refined_total = 0
     site_results: list[SiteResult] = []
-    for site in req.sites:
-        r = site_vector(site.lat_deg, site.lon_deg)
+    terrain_dems: set[str] = set()
+    for site, st in zip(req.sites, starts):
+        sc = scenarios[st]
+        et0, et1, ets, body_vecs = sc.et0, sc.et1, sc.ets, sc.body_vecs
+
+        def interval_out(iv: list[tuple[float, float]], et0: float = et0, et1: float = et1) -> list[IntervalOut]:
+            return [
+                IntervalOut(
+                    start_utc=to_utc(s), end_utc=to_utc(e), duration_s=round(e - s, 1),
+                    starts_at_window_start=s <= et0, ends_at_window_end=e >= et1,
+                )
+                for s, e in iv
+            ]
+
+        hz = load_horizon(site, provider.mode)
+        if hz is None:
+            r = site_vector(site.lat_deg, site.lon_deg)
+            sky_az = sky_el = None
+        else:
+            # Observer on the real surface plus the mast height, not on the 1737.4 km sphere.
+            radius_km = config.MOON_RADIUS_KM + (hz["site_height_m"] + hz["observer_height_m"]) / 1000.0
+            r = site_vector(site.lat_deg, site.lon_deg, radius_km)
+            sky_az, sky_el = np.asarray(hz["az_deg"], float), np.asarray(hz["el_deg"], float)
         basis = enu_basis(site.lat_deg, site.lon_deg)
-        hz, terrain_info = terrain_for(site.lat_deg, site.lon_deg, req.terrain)
+        margins: dict[str, np.ndarray] = {}
         series: dict[str, tuple[np.ndarray, np.ndarray]] = {}
         ivs: dict[str, list[tuple[float, float]]] = {}
         body_metrics: dict[str, BodyMetrics] = {}
         for body in config.BODIES:
             az, el, _ = topocentric_az_el(body_vecs[body], r, basis)
             series[body] = (az, el)
-            # Visibility is judged against the local horizon: the terrain profile when applied, else 0 deg.
-            clear = el - hz.at(az) if hz is not None else el
+            # margin = elevation above the horizon in that direction: the skyline at terrain sites, 0 deg otherwise.
+            margin = el if sky_az is None else el - skyline_at(az, sky_az, sky_el)
+            margins[body] = margin
 
-            def el_fn(t: float, body=body) -> float:
-                a, e, _ = topocentric_az_el(provider.body_vectors(body, np.array([t])), r, basis)
-                return float(e[0] - (hz.at(a)[0] if hz is not None else 0.0))
+            def margin_fn(t: float, body=body, r=r, basis=basis, sky_az=sky_az, sky_el=sky_el) -> float:
+                a1, e1, _ = topocentric_az_el(provider.body_vectors(body, np.array([t])), r, basis)
+                return float(e1[0] if sky_az is None else e1[0] - skyline_at(a1, sky_az, sky_el)[0])
 
-            iv, n_ref = analysis.visible_intervals(ets, clear, el_fn, config.REFINE_TOLERANCE_S)
+            iv, n_ref = analysis.visible_intervals(ets, margin, margin_fn, config.REFINE_TOLERANCE_S)
             n_refined_total += n_ref
             ivs[body] = iv
             g = analysis.longest_gap(iv, et0, et1)
@@ -115,13 +168,12 @@ def run_compare(req: CompareRequest, provider: EphemerisProvider) -> CompareResp
                 n_intervals=len(iv),
                 el_min_deg=round(float(el.min()), 4),
                 el_max_deg=round(float(el.max()), 4),
-                near_horizon_fraction=round(analysis.near_horizon_fraction(ets, clear, config.NEAR_HORIZON_DEG), 4),
+                near_horizon_fraction=round(analysis.near_horizon_fraction(ets, margin, config.NEAR_HORIZON_DEG), 4),
             )
-            series[body] = (az, el, clear)
         ivs["both"] = analysis.intersect(ivs["sun"], ivs["earth"])
         both_s = analysis.total_duration(ivs["both"])
-        sun_mask = series["sun"][2] > 0
-        earth_mask = series["earth"][2] > 0
+        sun_mask = margins["sun"] > 0
+        earth_mask = margins["earth"] > 0
         site_results.append(SiteResult(
             id=site.id, label=site.label, lat_deg=site.lat_deg, lon_deg=site.lon_deg,
             position_me_km=_r(r, 3),
@@ -133,23 +185,40 @@ def run_compare(req: CompareRequest, provider: EphemerisProvider) -> CompareResp
                 sun=body_metrics["sun"], earth=body_metrics["earth"],
                 both_duration_s=round(both_s, 1), both_fraction=round(both_s / duration_s, 6),
             ),
-            terrain=terrain_info,
+            start_utc=sc.timestamps[0],
+            timestamps_utc=sc.timestamps,
+            subpoints=sc.subpoints,
+            model="sphere" if hz is None else "terrain",
+            horizon=None if hz is None else HorizonOut(
+                az_deg=hz["az_deg"], el_deg=hz["el_deg"], site_height_m=hz["site_height_m"],
+                observer_height_m=hz["observer_height_m"],
+                source="LOLA " + " and ".join(d["name"] for d in hz["dems"]),
+            ),
         ))
+        terrain_dems.update(d["name"] for d in (hz or {}).get("dems", []))
 
-    if len(site_results) == 2:
-        a, b = site_results
-        headline, statements, tol = narrative.build(
-            a.id, a.label, a.metrics, b.id, b.label, b.metrics, duration_s, step_s
-        )
-    else:  # the pairwise narrative applies to exactly two sites; metrics are reported for every site
-        headline, statements, tol = (
-            "Metrics are reported for each site; compare them per criterion.", [], float(2 * step_s))
+    a, b = site_results
+    a_name, b_name = a.label, b.label
+    if starts_differ:
+        # Name the dates in the findings so sentences stay unambiguous (even for the same place twice).
+        a_name = f"{a.label} (from {_start_label(starts[0], starts[1])})"
+        b_name = f"{b.label} (from {_start_label(starts[1], starts[0])})"
+    headline, statements, tol = narrative.build(
+        a.id, a_name, a.metrics, b.id, b_name, b.metrics, duration_s, step_s,
+        a_terrain=a.model == "terrain", b_terrain=b.model == "terrain",
+    )
 
     if provider.mode == "spice":
         provenance = (
             "Computed with NASA/JPL NAIF SPICE (CSPICE via SpiceyPy) from the kernels listed; "
             "geometric visibility on an ideal spherical horizon."
         )
+        if terrain_dems:
+            provenance = provenance.replace(
+                "geometric visibility on an ideal spherical horizon.",
+                "geometric visibility above the LOLA terrain skyline at terrain sites (elevation maps "
+                + ", ".join(sorted(terrain_dems)) + ", NASA GSFC PGDA product 90) and above an ideal spherical horizon elsewhere.",
+            )
         kernel_list = [KernelOut(name=k.name, kind=k.kind, purpose=k.purpose, source_url=k.source_url, sha256=k.sha256)
                    for k in kernels.STATUS.kernels]
         toolkit = kernels.STATUS.toolkit_version
@@ -160,22 +229,18 @@ def run_compare(req: CompareRequest, provider: EphemerisProvider) -> CompareResp
         )
         kernel_list, toolkit = [], None
 
-    timestamps = provider.et_to_utc(ets)
+    sa = scenarios[starts[0]]  # top-level fields describe scenario A
     return CompareResponse(
-        timestamps_utc=timestamps,
-        elapsed_s=_r(ets - et0, 1),
+        timestamps_utc=sa.timestamps,
+        elapsed_s=_r(sa.ets - sa.et0, 1),  # identical for both scenarios: same duration and step
         sites=site_results,
-        subpoints=SubPoints(
-            subsolar_lat_deg=_r(ss_lat, 4), subsolar_lon_deg=_r(ss_lon, 4),
-            sub_earth_lat_deg=_r(se_lat, 4), sub_earth_lon_deg=_r(se_lon, 4),
-            earth_distance_km=_r(e_dist, 1),
-        ),
+        subpoints=sa.subpoints,
         comparison=Comparison(headline=headline, statements=statements, tolerance_s=round(tol, 1)),
         metadata=Metadata(
             mode=provider.mode, provenance=provenance,
             computed_at_utc=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            window_start_utc=timestamps[0], window_end_utc=timestamps[-1],
-            window_duration_s=duration_s, step_s=step_s, n_samples=len(ets),
+            window_start_utc=sa.timestamps[0], window_end_utc=sa.timestamps[-1],
+            window_duration_s=duration_s, starts_differ=starts_differ, step_s=step_s, n_samples=len(sa.ets),
             refinement_tolerance_s=config.REFINE_TOLERANCE_S, n_refined_transitions=n_refined_total,
             conventions=config.CONVENTIONS, limitations=config.LIMITATIONS,
             kernels=kernel_list, toolkit_version=toolkit,

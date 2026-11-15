@@ -1,0 +1,270 @@
+{
+ "comparison": {
+  "headline": "Apollo 11 has more sunlight during this window. Apollo 11 has a shorter maximum Earth-visibility gap.",
+  "statements": [
+   {
+    "id": "sun_duration",
+    "text": "Apollo 11 has more sunlight: 14.8 d (49.2%) vs 13.7 d (45.6%) at Shackleton.",
+    "favors": "A",
+    "kind": "comparison"
+   },
+   {
+    "id": "earth_duration",
+    "text": "Apollo 11 has more geometric Earth visibility: 30.0 d (100.0%) vs 13.0 d (43.3%) at Shackleton.",
+    "favors": "A",
+    "kind": "comparison"
+   },
+   {
+    "id": "both_duration",
+    "text": "Apollo 11 has more simultaneous sunlight and Earth visibility: 14.8 d (49.2%) vs 12.5 d (41.7%) at Shackleton.",
+    "favors": "A",
+    "kind": "comparison"
+   },
+   {
+    "id": "sun_gap",
+    "text": "Longest night: Apollo 11 at least 13.9 d, Shackleton at least 11.1 d. These cannot be ranked because at least one gap is cut off by the window boundary; extend the window to resolve it.",
+    "favors": null,
+    "kind": "comparison"
+   },
+   {
+    "id": "earth_gap",
+    "text": "Apollo 11's longest Earth outage is shorter: none (continuous), against at least 12.3 d at Shackleton.",
+    "favors": "A",
+    "kind": "comparison"
+   },
+   {
+    "id": "A_earth_always",
+    "text": "Earth stays above the ideal horizon at Apollo 11 for the entire window (minimum elevation 58.00\u00b0).",
+    "favors": null,
+    "kind": "observation"
+   },
+   {
+    "id": "B_sun_horizon",
+    "text": "At Shackleton, the Sun is within \u00b11\u00b0 of the ideal horizon for about 39.5% of the window, so real terrain could change this result.",
+    "favors": null,
+    "kind": "caveat"
+   }
+  ],
+  "tolerance_s": 12960.0
+ },
+ "timestamps_first_last": [
+  "2026-12-01T00:00:00Z",
+  "2026-12-31T00:00:00Z"
+ ],
+ "n_samples": 721,
+ "sites": [
+  {
+   "metrics": {
+    "sun": {
+     "visible_duration_s": 1275741.2,
+     "visible_fraction": 0.492184,
+     "longest_visible_s": 1275741.2,
+     "longest_gap": {
+      "start_utc": "2026-12-01T00:00:00Z",
+      "end_utc": "2026-12-14T21:41:22Z",
+      "duration_s": 1201281.6,
+      "open_start": true,
+      "open_end": false
+     },
+     "n_intervals": 1,
+     "el_min_deg": -87.8464,
+     "el_max_deg": 88.0362,
+     "near_horizon_fraction": 0.0111
+    },
+    "earth": {
+     "visible_duration_s": 2592000.0,
+     "visible_fraction": 1.0,
+     "longest_visible_s": 2592000.0,
+     "longest_gap": null,
+     "n_intervals": 1,
+     "el_min_deg": 57.999,
+     "el_max_deg": 72.725,
+     "near_horizon_fraction": 0.0
+    },
+    "both_duration_s": 1275741.2,
+    "both_fraction": 0.492184
+   },
+   "intervals": {
+    "sun": [
+     {
+      "start_utc": "2026-12-14T21:41:22Z",
+      "end_utc": "2026-12-29T16:03:43Z",
+      "duration_s": 1275741.2,
+      "starts_at_window_start": false,
+      "ends_at_window_end": false
+     }
+    ],
+    "earth": [
+     {
+      "start_utc": "2026-12-01T00:00:00Z",
+      "end_utc": "2026-12-31T00:00:00Z",
+      "duration_s": 2592000.0,
+      "starts_at_window_start": true,
+      "ends_at_window_end": true
+     }
+    ],
+    "both": [
+     {
+      "start_utc": "2026-12-14T21:41:22Z",
+      "end_utc": "2026-12-29T16:03:43Z",
+      "duration_s": 1275741.2,
+      "starts_at_window_start": false,
+      "ends_at_window_end": false
+     }
+    ]
+   },
+   "sun_el_every_50": [
+    -10.5043,
+    -35.8812,
+    -61.2271,
+    -86.0556,
+    -67.8252,
+    -42.4872,
+    -17.1056,
+    8.2808,
+    33.6576,
+    59.0115,
+    84.1191,
+    70.0561,
+    44.7115,
+    19.3259,
+    -6.0608
+   ],
+   "earth_az_every_50": [
+    274.09,
+    278.951,
+    281.35,
+    281.398,
+    279.037,
+    274.029,
+    266.203,
+    256.42,
+    247.786,
+    244.376,
+    247.902,
+    256.444,
+    266.036,
+    273.772,
+    278.825
+   ]
+  },
+  {
+   "metrics": {
+    "sun": {
+     "visible_duration_s": 1182970.0,
+     "visible_fraction": 0.456393,
+     "longest_visible_s": 1182970.0,
+     "longest_gap": {
+      "start_utc": "2026-12-01T00:00:00Z",
+      "end_utc": "2026-12-12T02:10:24Z",
+      "duration_s": 958223.6,
+      "open_start": true,
+      "open_end": false
+     },
+     "n_intervals": 1,
+     "el_min_deg": -1.5909,
+     "el_max_deg": 1.6473,
+     "near_horizon_fraction": 0.3951
+    },
+    "earth": {
+     "visible_duration_s": 1123360.0,
+     "visible_fraction": 0.433395,
+     "longest_visible_s": 1123360.0,
+     "longest_gap": {
+      "start_utc": "2026-12-01T00:00:00Z",
+      "end_utc": "2026-12-13T06:41:39Z",
+      "duration_s": 1060899.2,
+      "open_start": true,
+      "open_end": false
+     },
+     "n_intervals": 1,
+     "el_min_deg": -7.2008,
+     "el_max_deg": 6.2682,
+     "near_horizon_fraction": 0.0861
+    },
+    "both_duration_s": 1080294.4,
+    "both_fraction": 0.41678
+   },
+   "intervals": {
+    "sun": [
+     {
+      "start_utc": "2026-12-12T02:10:24Z",
+      "end_utc": "2026-12-25T18:46:34Z",
+      "duration_s": 1182970.0,
+      "starts_at_window_start": false,
+      "ends_at_window_end": false
+     }
+    ],
+    "earth": [
+     {
+      "start_utc": "2026-12-13T06:41:39Z",
+      "end_utc": "2026-12-26T06:44:19Z",
+      "duration_s": 1123360.0,
+      "starts_at_window_start": false,
+      "ends_at_window_end": false
+     }
+    ],
+    "both": [
+     {
+      "start_utc": "2026-12-13T06:41:39Z",
+      "end_utc": "2026-12-25T18:46:34Z",
+      "duration_s": 1080294.4,
+      "starts_at_window_start": false,
+      "ends_at_window_end": false
+     }
+    ]
+   },
+   "sun_el_every_50": [
+    -0.8607,
+    -1.3669,
+    -1.5699,
+    -1.4191,
+    -0.9439,
+    -0.2477,
+    0.5146,
+    1.171,
+    1.5716,
+    1.6225,
+    1.3078,
+    0.694,
+    -0.084,
+    -0.8528,
+    -1.4394
+   ],
+   "earth_az_every_50": [
+    226.682,
+    223.857,
+    222.44,
+    222.748,
+    224.71,
+    227.893,
+    231.59,
+    234.982,
+    237.319,
+    238.084,
+    237.109,
+    234.608,
+    231.135,
+    227.459,
+    224.392
+   ]
+  }
+ ],
+ "subsolar_lon_every_50": [
+  -77.0386,
+  -102.436,
+  -127.8334,
+  -153.2308,
+  -178.6282,
+  155.9744,
+  130.577,
+  105.1796,
+  79.7822,
+  54.3848,
+  28.9874,
+  3.59,
+  -21.8074,
+  -47.2048,
+  -72.6022
+ ]
+}

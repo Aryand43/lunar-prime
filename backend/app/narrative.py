@@ -39,11 +39,12 @@ def build(
     a_id: str, a_label: str, a: SiteMetrics,
     b_id: str, b_label: str, b: SiteMetrics,
     window_s: float, step_s: float,
+    a_terrain: bool = False, b_terrain: bool = False,
 ) -> tuple[str, list[Statement], float]:
     tol = max(2.0 * step_s, 0.005 * window_s)
     stmts: list[Statement] = []
-    # (phrase used in the headline, favoured id) for each decisive comparison, in priority order
-    decisive: dict[str, tuple[str, str]] = {}
+    # (headline phrase without a subject, favoured id, favoured label) for each decisive comparison
+    decisive: dict[str, tuple[str, str, str]] = {}
 
     def more_is_better(key: str, noun: str, va: float, fa: float, vb: float, fb: float, headline: str):
         if abs(va - vb) < tol:
@@ -60,7 +61,7 @@ def build(
             id=key, kind="comparison", favors=win_id,
             text=f"{win} has more {noun}: {fmt_duration(hi)} ({_pct(fhi)}) vs {fmt_duration(lo)} ({_pct(flo)}) at {lose}.",
         ))
-        decisive[key] = (f"{win} has {headline}", win_id)
+        decisive[key] = (headline, win_id, win)
 
     def shorter_gap_is_better(key: str, noun: str, ma: BodyMetrics, mb: BodyMetrics, headline: str):
         da, la = _gap(ma)
@@ -86,9 +87,9 @@ def build(
         short_txt = "none (continuous)" if s_d == 0 else fmt_duration(s_d)
         stmts.append(Statement(
             id=key, kind="comparison", favors=short_id,
-            text=f"{short} has the shorter longest {noun}: {short_txt} vs {_gap_str(l_d, l_lb)} at {long_}.",
+            text=f"{short}'s longest {noun} is shorter: {short_txt}, against {_gap_str(l_d, l_lb)} at {long_}.",
         ))
-        decisive[key] = (f"{short} has {headline}", short_id)
+        decisive[key] = (headline, short_id, short)
 
     more_is_better("sun_duration", "sunlight", a.sun.visible_duration_s, a.sun.visible_fraction,
                    b.sun.visible_duration_s, b.sun.visible_fraction, "more sunlight during this window")
@@ -97,37 +98,50 @@ def build(
                    "more Earth visibility")
     more_is_better("both_duration", "simultaneous sunlight and Earth visibility", a.both_duration_s,
                    a.both_fraction, b.both_duration_s, b.both_fraction, "more simultaneous sunlight and Earth visibility")
-    shorter_gap_is_better("sun_gap", "period without sunlight", a.sun, b.sun, "a shorter maximum period without sunlight")
-    shorter_gap_is_better("earth_gap", "period without Earth visibility", a.earth, b.earth,
-                          "a shorter maximum Earth-visibility gap")
+    shorter_gap_is_better("sun_gap", "night", a.sun, b.sun, "a shorter longest night")
+    shorter_gap_is_better("earth_gap", "Earth outage", a.earth, b.earth,
+                          "a shorter longest Earth outage")
+
+    sites = ((a_id, a_label, a, a_terrain), (b_id, b_label, b, b_terrain))
 
     # Observations: absolute conditions, stated per site.
-    for sid, label, m in ((a_id, a_label, a), (b_id, b_label, b)):
+    for sid, label, m, terr in sites:
+        horizon = "the local skyline" if terr else "the ideal horizon"
         for body, bm, name in (("sun", m.sun, "The Sun"), ("earth", m.earth, "Earth")):
             if bm.visible_fraction == 0.0:
                 stmts.append(Statement(id=f"{sid}_{body}_never", kind="observation", favors=None,
-                                       text=f"{name} never rises above the ideal horizon at {label} during this window "
+                                       text=f"{name} never rises above {horizon} at {label} during this window "
                                             f"(maximum elevation {bm.el_max_deg:.2f}°)."))
             elif bm.longest_gap is None:
                 stmts.append(Statement(id=f"{sid}_{body}_always", kind="observation", favors=None,
-                                       text=f"{name} stays above the ideal horizon at {label} for the entire window "
+                                       text=f"{name} stays above {horizon} at {label} for the entire window "
                                             f"(minimum elevation {bm.el_min_deg:.2f}°)."))
 
     # Caveats: where results are fragile with respect to terrain and finite discs.
-    for sid, label, m in ((a_id, a_label, a), (b_id, b_label, b)):
+    for sid, label, m, terr in sites:
+        if terr:
+            stmts.append(Statement(
+                id=f"{sid}_terrain_resolution", kind="caveat", favors=None,
+                text=f"At {label}, the skyline comes from 80 m and 240 m LOLA maps, so features smaller than that are not resolved.",
+            ))
+            continue
         for body, bm, name in (("sun", m.sun, "the Sun"), ("earth", m.earth, "Earth")):
             if bm.near_horizon_fraction >= 0.10:
                 stmts.append(Statement(
                     id=f"{sid}_{body}_horizon", kind="caveat", favors=None,
                     text=f"At {label}, {name} is within ±{config.NEAR_HORIZON_DEG:.0f}° of the ideal horizon for about "
-                         f"{_pct(bm.near_horizon_fraction)} of the window, so local terrain and the finite disc "
-                         "could change these visibility results substantially.",
+                         f"{_pct(bm.near_horizon_fraction)} of the window, so real terrain could change this result.",
                 ))
 
     order = ["sun_duration", "earth_gap", "earth_duration", "sun_gap", "both_duration"]
-    picks = [decisive[k][0] for k in order if k in decisive][:2]
+    picks = [decisive[k] for k in order if k in decisive][:2]
     if not picks:
         headline = "The two sites perform similarly on these criteria during this window."
+    elif len(picks) == 1:
+        headline = f"{picks[0][2]} has {picks[0][0]}."
+    elif picks[0][1] == picks[1][1]:
+        # Same winner on both criteria: name it once.
+        headline = f"{picks[0][2]} has {picks[0][0]} and {picks[1][0]}."
     else:
-        headline = "; ".join(picks) + "."
+        headline = f"{picks[0][2]} has {picks[0][0]}. {picks[1][2]} has {picks[1][0]}."
     return headline, stmts, tol

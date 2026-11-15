@@ -7,16 +7,18 @@ export interface SiteInput {
   label: string;
   lat_deg: number;
   lon_deg: number;
+  /** This scenario's start (ISO 8601 UTC). Omitted means the request's start_utc. */
+  start_utc?: string;
+  /** Preset key of a precomputed terrain skyline (used only while the coordinates match the preset). */
+  horizon_key?: string;
 }
 
 export interface CompareRequest {
-  /** 1 to 4 sites. */
-  sites: SiteInput[];
+  sites: [SiteInput, SiteInput];
   start_utc: string;
   duration_hours: number;
   step_minutes: number;
   mode: Mode;
-  terrain?: boolean;
 }
 
 export interface AzEl {
@@ -60,6 +62,23 @@ export interface SiteMetrics {
 
 export type Lane = "sun" | "earth" | "both";
 
+export interface SubPoints {
+  subsolar_lat_deg: number[];
+  subsolar_lon_deg: number[];
+  sub_earth_lat_deg: number[];
+  sub_earth_lon_deg: number[];
+  earth_distance_km: number[];
+}
+
+export interface HorizonOut {
+  az_deg: number[];
+  /** Skyline elevation angle (deg) above the local horizontal. */
+  el_deg: number[];
+  site_height_m: number;
+  observer_height_m: number;
+  source: string;
+}
+
 export interface SiteResult {
   id: string;
   label: string;
@@ -71,24 +90,12 @@ export interface SiteResult {
   masks: Record<Lane, boolean[]>;
   intervals: Record<Lane, IntervalOut[]>;
   metrics: SiteMetrics;
-  terrain?: TerrainInfo;
-}
-
-export interface TerrainInfo {
-  applied: boolean;
-  reason?: string;
-  source?: string;
-  source_url?: string;
-  resolution_m?: number;
-  observer_height_m?: number;
-  max_distance_km?: number;
-  site_height_m?: number;
-  max_horizon_deg?: number;
-  mean_horizon_deg?: number;
-  truncated_fraction?: number;
-  az_deg?: number[];
-  el_deg?: number[];
-  note?: string;
+  /** This scenario's window start, sample times and sub-points (they differ from site A's when starts differ). */
+  start_utc: string;
+  timestamps_utc: string[];
+  subpoints: SubPoints;
+  model: "terrain" | "sphere";
+  horizon: HorizonOut | null;
 }
 
 export interface Statement {
@@ -113,6 +120,7 @@ export interface Metadata {
   window_start_utc: string;
   window_end_utc: string;
   window_duration_s: number;
+  starts_differ: boolean;
   step_s: number;
   n_samples: number;
   refinement_tolerance_s: number;
@@ -127,14 +135,8 @@ export interface Metadata {
 export interface CompareResponse {
   timestamps_utc: string[];
   elapsed_s: number[];
-  sites: SiteResult[];
-  subpoints: {
-    subsolar_lat_deg: number[];
-    subsolar_lon_deg: number[];
-    sub_earth_lat_deg: number[];
-    sub_earth_lon_deg: number[];
-    earth_distance_km: number[];
-  };
+  sites: [SiteResult, SiteResult];
+  subpoints: SubPoints;
   comparison: { headline: string; statements: Statement[]; tolerance_s: number };
   metadata: Metadata;
 }

@@ -17,5 +17,8 @@ backend/.data/
 .env
 backend/.env
 
-# LOLA terrain DEM (downloaded by scripts/fetch_terrain.sh)
+# Private Node.js downloaded by run-lunar-prime.command
+.tools/
+
+# LOLA elevation and illumination maps from scripts/fetch_terrain.sh
 backend/terrain/

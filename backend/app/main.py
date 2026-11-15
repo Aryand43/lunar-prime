@@ -19,7 +19,6 @@ from .routing import RoutingError
 from .routing_models import RouteRequest, RouteResponse
 from .routing_service import build_response
 from .service import ComputeError, run_compare
-from . import terrain
 from .windows import WindowsRequest, find_windows
 from . import chat_api
 
@@ -107,10 +106,6 @@ def compare(req: CompareRequest):
         return _error(422, "synthetic_disabled", _SYNTHETIC_DISABLED)
     else:
         provider = SyntheticProvider()
-    if req.terrain and terrain.available():
-        for s in req.sites:  # horizon profiles are pure NumPy: compute them before taking the SPICE lock
-            if terrain.covers(s.lat_deg):
-                terrain.horizon(round(s.lat_deg, 5), round(s.lon_deg, 5))
     try:
         with kernels.SPICE_LOCK:  # CSPICE is not thread-safe
             return run_compare(req, provider)
@@ -127,12 +122,12 @@ def windows(req: WindowsRequest):
     if req.mode == "spice":
         if not kernels.STATUS.loaded:
             return _error(503, "spice_unavailable", (kernels.STATUS.error or "SPICE kernels are not loaded.")
-                          + " Synthetic demo mode is available for UI development, but its results are not scientific.")
+                          + " Run scripts/fetch_kernels.sh and restart the backend.")
         provider = SpiceProvider()
+    elif not config.ALLOW_SYNTHETIC:
+        return _error(422, "synthetic_disabled", _SYNTHETIC_DISABLED)
     else:
         provider = SyntheticProvider()
-    if req.terrain and terrain.available() and terrain.covers(req.site.lat_deg):
-        terrain.horizon(round(req.site.lat_deg, 5), round(req.site.lon_deg, 5))  # warm cache outside the lock
     try:
         with kernels.SPICE_LOCK:
             return find_windows(req, provider)
@@ -145,10 +140,18 @@ def windows(req: WindowsRequest):
 
 @app.get("/api/terrain/status")
 def terrain_status():
-    return dict(available=terrain.available(), source=terrain.SOURCE, source_url=terrain.SOURCE_URL,
-                coverage="60°S to the south pole", resolution_m=terrain.SCALE_M,
-                observer_height_m=terrain.OBSERVER_HEIGHT_M, max_distance_km=terrain.MAX_DISTANCE_KM,
-                sha256=terrain.dem_sha256())
+    """Precomputed LOLA skylines available to /api/compare and /api/windows (by horizon_key)."""
+    import json
+    keys = []
+    for path in sorted(config.HORIZON_DIR.glob("*.json")):
+        try:
+            d = json.loads(path.read_text())
+            keys.append(dict(key=d["key"], label=d["label"], lat_deg=d["lat_deg"], lon_deg=d["lon_deg"],
+                             dems=[x["name"] for x in d.get("dems", [])]))
+        except (OSError, ValueError, KeyError):
+            continue
+    return dict(skylines=keys, source="LOLA south-polar elevation maps, NASA GSFC PGDA product 90",
+                source_url="https://pgda.gsfc.nasa.gov/products/90")
 
 
 @app.get("/api/sites")

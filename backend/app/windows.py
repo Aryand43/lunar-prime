@@ -19,7 +19,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from . import config, kernels
 from .geometry import EphemerisProvider, enu_basis, site_vector, topocentric_az_el
 from .models import SiteInput
-from .service import ComputeError, terrain_for
+from .service import ComputeError, load_horizon
+from .terrain import skyline_at
 
 MAX_SAMPLES = 60_000
 
@@ -34,7 +35,7 @@ class WindowsRequest(BaseModel):
     step_minutes: float = Field(60.0, ge=10.0, le=240.0)
     candidate_hours: float = Field(6.0, ge=1.0, le=72.0, description="Spacing between candidate start times")
     priority: Literal["power", "comms", "both"] = "both"
-    terrain: bool = True
+    terrain: bool = Field(True, description="Use the precomputed LOLA skyline when site.horizon_key names one")
     top_k: int = Field(5, ge=1, le=10)
     mode: Literal["spice", "synthetic"] = "spice"
 
@@ -87,13 +88,27 @@ def find_windows(req: WindowsRequest, provider: EphemerisProvider) -> dict:
                            f"({kernels.STATUS.coverage_start_utc} to {kernels.STATUS.coverage_end_utc}).")
     n = int(math.floor(total / step)) + 1
     ets = et0 + step * np.arange(n)
-    hz, terrain_info = terrain_for(req.site.lat_deg, req.site.lon_deg, req.terrain)
-    r = site_vector(req.site.lat_deg, req.site.lon_deg)
+    # Same skyline handling as /api/compare: observer on the real surface plus mast height, visibility
+    # judged against the precomputed LOLA skyline; smooth sphere and 0 deg horizon otherwise.
+    hz = load_horizon(req.site, provider.mode) if req.terrain else None
+    if hz is None:
+        r = site_vector(req.site.lat_deg, req.site.lon_deg)
+        sky = None
+        terrain_info = {"applied": False, "reason": (
+            "Smooth sphere, ideal horizon: no precomputed LOLA skyline for this site." if req.terrain
+            else "Smooth sphere, ideal horizon (terrain not requested).")}
+    else:
+        r = site_vector(req.site.lat_deg, req.site.lon_deg,
+                        config.MOON_RADIUS_KM + (hz["site_height_m"] + hz["observer_height_m"]) / 1000.0)
+        sky = (np.asarray(hz["az_deg"], float), np.asarray(hz["el_deg"], float))
+        terrain_info = {"applied": True, "horizon_key": hz["key"], "label": hz["label"],
+                        "dems": [d["name"] for d in hz.get("dems", [])],
+                        "max_horizon_deg": round(float(np.max(sky[1])), 3)}
     basis = enu_basis(req.site.lat_deg, req.site.lon_deg)
     vis = {}
     for body in config.BODIES:
         az, el, _ = topocentric_az_el(provider.body_vectors(body, ets), r, basis)
-        vis[body] = (el - hz.at(az) if hz is not None else el) > 0
+        vis[body] = (el - skyline_at(az, *sky) if sky is not None else el) > 0
     both = vis["sun"] & vis["earth"]
 
     m = max(1, int(round(req.mission_days * 86400.0 / step)))

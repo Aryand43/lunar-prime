@@ -1,35 +1,44 @@
 #!/usr/bin/env bash
-# Download the NASA LRO LOLA south-polar digital elevation model used for terrain horizons.
-# Source: NASA PDS Geosciences Node, LRO LOLA gridded data records (LRO-L-LOLA-4-GDR-V1.0), product
-# LDEM_60S_240M (polar stereographic, 240 m/pixel, 60°S to the south pole, ~120 MB). Kept out of Git.
+# Download the LOLA south-polar elevation maps Lunar Prime uses for real horizons, plus NASA's average
+# illumination maps used only by scripts/validate_terrain.py. Large binaries, kept out of Git.
 #
-# Usage: scripts/fetch_terrain.sh [destination_dir]   (default: backend/terrain)
+#   DEMs: NASA GSFC PGDA product 90, "A New View of the Lunar South Pole from LOLA" (Barker et al. 2023)
+#         https://pgda.gsfc.nasa.gov/products/90   (cloud-optimised GeoTIFF, MOON_ME frame of DE421)
+#   Validation: LOLA PDS "average illumination" maps (Mazarico et al. 2011), PGDA product 69
+#         https://imbrium.mit.edu/BROWSE/EXTRAS/ILLUMINATION
+#
+# Usage: scripts/fetch_terrain.sh [--no-validation]     Re-running skips files already present.
 set -euo pipefail
 
-BASE="https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DEST="${1:-$ROOT/backend/terrain}"
-mkdir -p "$DEST"
+DEST="$ROOT/backend/terrain"
+mkdir -p "$DEST/validation"
 
-for name in ldem_60s_240m.lbl ldem_60s_240m.img; do
-  if [[ -s "$DEST/$name" ]]; then
-    echo "ok       $name"
-    continue
-  fi
-  echo "fetching $name"
-  if ! curl -fsSL --retry 3 --connect-timeout 20 -o "$DEST/$name.part" "$BASE/$name"; then
-    rm -f "$DEST/$name.part"
-    echo "ERROR: could not download $BASE/$name" >&2
-    exit 1
-  fi
-  mv "$DEST/$name.part" "$DEST/$name"
-done
+fetch() {  # url dest
+  local url="$1" out="$2" name; name="$(basename "$out")"
+  if [[ -s "$out" ]]; then echo "ok       $name"; return; fi
+  echo "fetching $name"; [[ -s "$out.part" ]] && echo "  resuming from $(( $(wc -c < "$out.part") / 1048576 )) MB"
+  # Resume a partial download (-C -). If the transfer stalls (under 1 KB/s for 30 s, e.g. after a Wi-Fi
+  # change), curl gives up and the loop tries again from where it stopped, up to 20 times.
+  local n=0
+  until curl -fL -C - --connect-timeout 20 --speed-limit 1024 --speed-time 30 --progress-bar -o "$out.part" "$url"; do
+    n=$((n + 1)); [[ $n -ge 20 ]] && { echo "Giving up on $name after $n attempts; run the script again later."; exit 1; }
+    echo "  connection dropped; resuming ($n)..."; sleep 3
+  done
+  mv "$out.part" "$out"
+}
 
-expected=120435200
-actual=$(wc -c < "$DEST/ldem_60s_240m.img" | tr -d ' ')
-if [[ "$actual" != "$expected" ]]; then
-  echo "ERROR: ldem_60s_240m.img is $actual bytes, expected $expected" >&2
-  exit 1
+PGDA="https://pgda.gsfc.nasa.gov/data/LOLA_20mpp"
+fetch "$PGDA/LDEM_80S_80MPP_ADJ.TIF"  "$DEST/LDEM_80S_80MPP_ADJ.TIF"    # 181 MB, 80 m/px, 80S to pole
+fetch "$PGDA/LDEM_60S_240MPP_ADJ.TIF" "$DEST/LDEM_60S_240MPP_ADJ.TIF"   # 210 MB, 240 m/px, 60S to pole
+
+if [[ "${1:-}" != "--no-validation" ]]; then
+  ILL="https://imbrium.mit.edu/EXTRAS/ILLUMINATION/IMG"
+  for base in AVGVISIB_85S_060M_201608 AVGVISIB_85S_060M_201608_EARTH AVGVISIB_65S_240M_201608 AVGVISIB_65S_240M_201608_EARTH; do
+    fetch "$ILL/$base.LBL" "$DEST/validation/$base.LBL"
+    fetch "$ILL/$base.IMG" "$DEST/validation/$base.IMG"
+  done
 fi
-( cd "$DEST" && shasum -a 256 ldem_60s_240m.img ldem_60s_240m.lbl > SHA256SUMS.local )
-echo "Terrain DEM ready in $DEST"
+
+( cd "$DEST" && shopt -s nullglob && shasum -a 256 *.TIF validation/* > SHA256SUMS.local )
+echo "Done. Checksums in backend/terrain/SHA256SUMS.local"

@@ -65,8 +65,8 @@ export default function PlotlyChart({ data, layout, config, onClickX, relayout, 
 
   return (
     <div className={className} role="img" aria-label={ariaLabel}>
-      {!plotly && !failed && <div className="flex h-full items-center justify-center text-xs text-muted">Loading chart…</div>}
-      {failed && <div className="flex h-full items-center justify-center text-xs text-danger">Chart library failed to load.</div>}
+      {!plotly && !failed && <div className="flex h-full items-center justify-center text-[13px] text-muted">Loading chart…</div>}
+      {failed && <div className="flex h-full items-center justify-center text-[13px] text-danger">Chart library failed to load.</div>}
       <div ref={el} className="h-full w-full" />
     </div>
   );

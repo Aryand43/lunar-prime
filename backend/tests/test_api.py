@@ -1,6 +1,6 @@
 import pytest
 
-from tests.conftest import APOLLO11, CHANGE4, SHACKLETON, site
+from tests.conftest import APOLLO11, CHANGE4, SHACKLETON
 
 
 def req(**kw):
@@ -20,7 +20,7 @@ def test_health(client):
     ({"sites": [dict(APOLLO11, lat_deg=91), SHACKLETON]}, "sites.0.lat_deg"),
     ({"sites": [APOLLO11, dict(SHACKLETON, lon_deg=-200)]}, "sites.1.lon_deg"),
     ({"sites": [APOLLO11, dict(APOLLO11, label="x")]}, None),  # duplicate id
-    ({"sites": [APOLLO11, SHACKLETON, CHANGE4, dict(APOLLO11, id="a2"), dict(APOLLO11, id="a3")]}, "sites"),  # > 4
+    ({"sites": [APOLLO11]}, "sites"),
     ({"start_utc": "2026-12-01T00:00:00"}, "start_utc"),  # naive time
     ({"start_utc": "2026-12-01T00:00:00+05:00"}, "start_utc"),
     ({"start_utc": "not a date"}, "start_utc"),
@@ -93,12 +93,91 @@ def test_synthetic_mode_is_labelled(client):
     assert md["mode"] == "synthetic" and "SYNTHETIC" in md["provenance"] and md["kernels"] == []
 
 
-def test_compare_one_to_four_sites(client):
-    base = {"start_utc": "2027-02-01T00:00:00Z", "duration_hours": 48, "step_minutes": 60, "mode": "synthetic"}
-    four = [site(f"s{i}", f"Site {i}", -80 + i, 10 * i) for i in range(4)]
-    for n in (1, 3, 4):
-        r = client.post("/api/compare", json=dict(base, sites=four[:n]))
-        assert r.status_code == 200, r.text
-        assert len(r.json()["sites"]) == n
-    assert client.post("/api/compare", json=dict(base, sites=four + [site("s9", "x", 0, 0)])).status_code == 422
-    assert client.post("/api/compare", json=dict(base, sites=[four[0], four[0]])).status_code == 422
+# ----- U4: each site may start on its own date -----
+
+import json
+from pathlib import Path
+
+FIXTURE = Path(__file__).parent / "fixtures" / "compare_synthetic_before_u4.json"
+BASELINE_BODY = {
+    "sites": [
+        {"id": "A", "label": "Apollo 11", "lat_deg": 0.67408, "lon_deg": 23.47297},
+        {"id": "B", "label": "Shackleton", "lat_deg": -89.67, "lon_deg": 129.78},
+    ],
+    "start_utc": "2026-12-01T00:00:00Z", "duration_hours": 720, "step_minutes": 60, "mode": "synthetic",
+}
+
+
+def _close(x, y, path=""):
+    if isinstance(x, dict):
+        for k in x:
+            _close(x[k], y[k], f"{path}/{k}")
+    elif isinstance(x, list):
+        assert len(x) == len(y), path
+        for i, (p, q) in enumerate(zip(x, y)):
+            _close(p, q, f"{path}[{i}]")
+    elif isinstance(x, float):
+        assert y == pytest.approx(x, abs=1e-6), path
+    else:
+        assert x == y, path
+
+
+def test_no_site_starts_matches_behaviour_before_u4(client):
+    """Without sites[].start_utc the existing fields are unchanged (fixture captured before U4, synthetic provider)."""
+    d = client.post("/api/compare", json=BASELINE_BODY).json()
+    fx = json.loads(FIXTURE.read_text())
+    # The headline wording changed on purpose in F2 (see test_narrative.py); statements and tolerance must not.
+    _close(fx["comparison"]["statements"], d["comparison"]["statements"], "statements")
+    _close(fx["comparison"]["tolerance_s"], d["comparison"]["tolerance_s"], "tolerance")
+    assert [d["timestamps_utc"][0], d["timestamps_utc"][-1]] == fx["timestamps_first_last"]
+    assert d["metadata"]["n_samples"] == fx["n_samples"]
+    _close(fx["subsolar_lon_every_50"], d["subpoints"]["subsolar_lon_deg"][::50], "subsolar")
+    for f, s in zip(fx["sites"], d["sites"]):
+        _close(f["metrics"], s["metrics"], "metrics")
+        _close(f["intervals"], s["intervals"], "intervals")
+        _close(f["sun_el_every_50"], s["sun"]["el_deg"][::50], "sun.el")
+        _close(f["earth_az_every_50"], s["earth"]["az_deg"][::50], "earth.az")
+    # New per-site fields agree with the shared top-level ones when the starts are equal.
+    assert d["metadata"]["starts_differ"] is False
+    for s in d["sites"]:
+        assert s["start_utc"] == d["metadata"]["window_start_utc"]
+        assert s["timestamps_utc"] == d["timestamps_utc"]
+        assert s["subpoints"] == d["subpoints"]
+
+
+def test_same_place_two_dates(client):
+    a = {"id": "A", "label": "Mons Mouton", "lat_deg": -84.7906, "lon_deg": 29.1957}
+    b = dict(a, id="B", start_utc="2026-12-15T00:00:00Z")
+    d = client.post("/api/compare", json=dict(BASELINE_BODY, sites=[a, b])).json()
+    sa, sb = d["sites"]
+    assert d["metadata"]["starts_differ"] is True
+    assert sa["timestamps_utc"][0] == sa["start_utc"] == "2026-12-01T00:00:00Z"
+    assert sb["timestamps_utc"][0] == sb["start_utc"] == "2026-12-15T00:00:00Z"
+    assert len(sa["timestamps_utc"]) == len(sb["timestamps_utc"]) == len(d["elapsed_s"])
+    assert sa["sun"]["el_deg"] != sb["sun"]["el_deg"]
+    assert sa["subpoints"]["subsolar_lon_deg"] != sb["subpoints"]["subsolar_lon_deg"]
+    # Top-level fields describe scenario A.
+    assert d["timestamps_utc"] == sa["timestamps_utc"] and d["subpoints"] == sa["subpoints"]
+    # Every interval of B lies inside B's own window.
+    for iv in sb["intervals"]["sun"] + sb["intervals"]["earth"]:
+        assert "2026-12-15T00:00:00Z" <= iv["start_utc"] <= iv["end_utc"] <= sb["timestamps_utc"][-1]
+    # Labels stay plain; the findings name both dates.
+    assert sa["label"] == sb["label"] == "Mons Mouton"
+    text = d["comparison"]["headline"] + " ".join(s["text"] for s in d["comparison"]["statements"])
+    assert "(from 2026-12-01)" in text and "(from 2026-12-15)" in text
+
+
+@pytest.mark.parametrize("bad", ["2026-12-15T00:00:00", "2026-12-15T00:00:00+08:00", "not a date"])
+def test_site_start_validation(client, bad):
+    b = dict(BASELINE_BODY["sites"][1], start_utc=bad)
+    r = client.post("/api/compare", json=dict(BASELINE_BODY, sites=[BASELINE_BODY["sites"][0], b]))
+    assert r.status_code == 422
+    assert any(det["field"] == "sites.1.start_utc" for det in r.json()["error"]["details"])
+
+
+def test_site_start_outside_coverage(client, spice_loaded):
+    b = dict(BASELINE_BODY["sites"][1], start_utc="2160-01-01T00:00:00Z")
+    body = dict(BASELINE_BODY, mode="spice", sites=[BASELINE_BODY["sites"][0], b])
+    r = client.post("/api/compare", json=body)
+    assert r.status_code == 422
+    assert "coverage" in r.json()["error"]["message"]
