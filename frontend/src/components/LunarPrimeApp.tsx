@@ -341,7 +341,16 @@ export default function LunarPrimeApp() {
 
             <div className="grid grid-cols-1 content-start gap-8 sm:grid-cols-2">
               {result
-                ? result.sites.map((s, k) => <HorizonView key={s.id} site={s} letter={LETTERS[k]} index={i} />)
+                ? result.sites.map((s, k) => (
+                    <HorizonView
+                      key={s.id}
+                      site={s}
+                      letter={LETTERS[k]}
+                      index={i}
+                      timeUtc={result.timestamps_utc[i]}
+                      windowEndUtc={result.metadata.window_end_utc}
+                    />
+                  ))
                 : LETTERS.map((l) => (
                     <div key={l} className="flex h-[330px] items-center justify-center text-[13px] text-muted">
                       {loading ? "Computing local horizon…" : `Horizon view for site ${l}`}

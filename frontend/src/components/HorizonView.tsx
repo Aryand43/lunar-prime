@@ -2,7 +2,8 @@
 
 import { useMemo } from "react";
 
-import { compass, fmtLat, fmtLon } from "@/lib/format";
+import { nextChange, type NextChange } from "@/lib/events";
+import { compass, fmtDuration, fmtLat, fmtLon, fmtUtc } from "@/lib/format";
 import { EARTH, EARTH_INK, FIELD, INK, LINE, MUTED, NIGHT, SUN, SUN_INK } from "@/lib/theme";
 import type { SiteResult } from "@/lib/types";
 
@@ -21,6 +22,9 @@ interface Props {
   site: SiteResult;
   letter: "A" | "B";
   index: number;
+  /** Time of the current sample for this site, and the end of this site's window (both UTC). */
+  timeUtc: string;
+  windowEndUtc: string;
 }
 
 function stride(n: number) {
@@ -72,6 +76,26 @@ function stripTrack(az: number[], el: number[]) {
   return d;
 }
 
+/** "Sun sets in 4.2 d", "Earth does not rise for at least 6.0 d (to the end of the window)", ... */
+function Countdown({ name, ink, c }: { name: string; ink: string; c: NextChange }) {
+  const d = fmtDuration(c.secondsUntil);
+  const text = c.beyondWindow
+    ? c.state === "up"
+      ? `${name} stays up for at least ${d}`
+      : `${name} does not rise for at least ${d}`
+    : c.state === "up"
+      ? `${name} sets in ${d}`
+      : `${name} rises in ${d}`;
+  return (
+    <p className="text-[15px] leading-[22px] font-bold" style={{ color: ink }}>
+      {text}{" "}
+      <span className="text-[13px] font-normal text-muted">
+        {c.beyondWindow ? "(to the end of the window)" : fmtUtc(c.atUtc!).slice(0, 16) + " UTC"}
+      </span>
+    </p>
+  );
+}
+
 function Readout({ name, fill, ink, az, el }: { name: string; fill: string; ink: string; az: number; el: number }) {
   const up = el > 0;
   return (
@@ -92,10 +116,13 @@ function Readout({ name, fill, ink, az, el }: { name: string; fill: string; ink:
   );
 }
 
-export default function HorizonView({ site, letter, index }: Props) {
+export default function HorizonView({ site, letter, index, timeUtc, windowEndUtc }: Props) {
   const i = Math.min(index, site.sun.az_deg.length - 1);
   const sun = { az: site.sun.az_deg[i], el: site.sun.el_deg[i] };
   const earth = { az: site.earth.az_deg[i], el: site.earth.el_deg[i] };
+
+  const sunNext = nextChange(site.intervals.sun, timeUtc, windowEndUtc);
+  const earthNext = nextChange(site.intervals.earth, timeUtc, windowEndUtc);
 
   const tracks = useMemo(
     () => ({
@@ -205,6 +232,10 @@ export default function HorizonView({ site, letter, index }: Props) {
               </text>
             ))}
           </svg>
+        </div>
+        <div className="w-full space-y-1" aria-live="off">
+          <Countdown name="Sun" ink={SUN_INK} c={sunNext} />
+          <Countdown name="Earth" ink={EARTH_INK} c={earthNext} />
         </div>
         <div className="grid w-full max-w-[260px] grid-cols-[auto_1fr_auto_auto] gap-x-2.5 gap-y-1 border-t border-line pt-2 text-[13px] leading-[18px]">
           <span />
