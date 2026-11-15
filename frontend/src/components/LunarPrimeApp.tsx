@@ -311,6 +311,7 @@ export default function LunarPrimeApp() {
                       key={v}
                       type="button"
                       onClick={() => setView((p) => ({ name: v, nonce: p.nonce + 1 }))}
+                      title={`Turn the globe to the ${v === "near" ? "side facing Earth" : v === "far" ? "side facing away from Earth" : v + " pole"}`}
                       className={`rounded-[2px] border px-2.5 py-1 text-[13px] ${
                         view.name === v ? "border-white bg-white text-black" : "border-[#55585c] bg-black/60 text-[#D9DAD8] hover:border-white"
                       }`}
@@ -424,7 +425,7 @@ export default function LunarPrimeApp() {
                 <span className="flex items-center gap-1.5"><span className="h-2.5 w-4 bg-sun" /> Sun above horizon</span>
                 <span className="flex items-center gap-1.5"><span className="h-2.5 w-4 bg-earth" /> Earth above horizon</span>
                 <span className="flex items-center gap-1.5"><span className="h-2.5 w-4 bg-text" /> Sun and Earth together</span>
-                <span className="flex items-center gap-1.5"><span className="h-2.5 w-4 bg-night" /> Not visible</span>
+                <span className="flex items-center gap-1.5" title="Below the horizon (or behind terrain at LOLA sites)"><span className="h-2.5 w-4 bg-night" /> Not visible</span>
                 <span className="flex items-center gap-1.5"><span className="h-px w-4 border-t border-dashed border-muted" /> Ideal horizon (0°)</span>
               </div>
               {result && (

@@ -87,7 +87,11 @@ function Countdown({ name, ink, c }: { name: string; ink: string; c: NextChange 
       ? `${name} sets in ${d}`
       : `${name} rises in ${d}`;
   return (
-    <p className="text-[15px] leading-[22px] font-bold" style={{ color: ink }}>
+    <p
+      className="text-[15px] leading-[22px] font-bold"
+      style={{ color: ink }}
+      title="Time from the scrubber time to the next rise or set, from the refined visibility intervals (about 1 s precision)."
+    >
       {text}{" "}
       <span className="text-[13px] font-normal text-muted">
         {c.beyondWindow ? "(to the end of the window)" : fmtUtc(c.atUtc!).slice(0, 16) + " UTC"}
@@ -99,7 +103,10 @@ function Countdown({ name, ink, c }: { name: string; ink: string; c: NextChange 
 /** Current elevation as a large figure; grey with "below horizon" when the body is down. */
 function BigElevation({ name, ink, el, az, up }: { name: string; ink: string; el: number; az: number; up: boolean }) {
   return (
-    <p className="flex flex-wrap items-baseline gap-x-2">
+    <p
+      className="flex flex-wrap items-baseline gap-x-2"
+      title={`${name} elevation: angle of its centre above the local horizontal at the scrubber time. Direction is the compass bearing (azimuth) of ${name}.`}
+    >
       <span className="text-[24px] leading-[30px] font-bold whitespace-nowrap tabular-nums" style={{ color: up ? ink : MUTED }}>
         {name} {el >= 0 ? "+" : "−"}
         {Math.abs(el).toFixed(1)}°
@@ -209,6 +216,7 @@ export default function HorizonView({ site, letter, index, timeUtc, windowEndUtc
           role="img"
           aria-label={`Sky plot. Sun elevation ${sun.el.toFixed(2)} degrees, azimuth ${sun.az.toFixed(1)}. Earth elevation ${earth.el.toFixed(2)} degrees, azimuth ${earth.az.toFixed(1)}.`}
         >
+          <title>Sky seen from the site: zenith in the centre, horizon on the outer ring, north up. Lines are the Sun and Earth paths over the window; the dark band is terrain above 0°.</title>
           <circle cx={C} cy={C} r={R} fill={FIELD} stroke={INK} strokeWidth={1.2} />
           {skyBand && <path d={skyBand} fill={NIGHT} fillOpacity={0.8} fillRule="evenodd" />}
           {[30, 60].map((e) => (
@@ -245,6 +253,7 @@ export default function HorizonView({ site, letter, index, timeUtc, windowEndUtc
           <div>
             <p className="mb-1 text-[12px] text-muted">Within 10° of the horizon, by compass direction</p>
             <svg width={W} height={H + TICK_H} viewBox={`0 0 ${W} ${H + TICK_H}`} role="img" aria-label="Elevation near the horizon versus azimuth">
+                <title>Elevation within 10° of the horizon against compass direction. The dark shape is the horizon: terrain at LOLA sites, 0° elsewhere. A body is visible only above it.</title>
               <rect x={0} y={0} width={W} height={H / 2} fill={FIELD} />
               {stripSky ? <path d={stripSky} fill={NIGHT} /> : <rect x={0} y={H / 2} width={W} height={H / 2} fill={NIGHT} />}
               {[90, 180, 270].map((a) => (

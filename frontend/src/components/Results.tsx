@@ -104,7 +104,12 @@ export function MetricsTable({ result, explain = false }: { result: CompareRespo
                 <span className="mr-1.5 font-bold text-text">{k === 0 ? "A" : "B"}</span>
                 {s.label}
                 {result.metadata.starts_differ && <div className="text-text tabular-nums">from {fmtUtc(s.start_utc).slice(0, 16)} UTC</div>}
-                <div className="text-[12px] text-muted">{s.model === "terrain" ? "terrain" : "smooth sphere"}</div>
+                <div
+                  className="text-[12px] text-muted"
+                  title={s.model === "terrain" ? "Visible means above the real skyline from LOLA elevation maps." : "Visible means above 0° on a smooth sphere; terrain is not included."}
+                >
+                  {s.model === "terrain" ? "terrain" : "smooth sphere"}
+                </div>
               </th>
             ))}
           </tr>
@@ -116,7 +121,7 @@ export function MetricsTable({ result, explain = false }: { result: CompareRespo
             return (
               <Fragment key={r.label}>
                 <tr className={`align-top ${showExplain ? "" : "border-b border-line"}`}>
-                  <th scope="row" className="py-3 pr-3 text-left font-normal text-text">
+                  <th scope="row" className="py-3 pr-3 text-left font-normal text-text" title={r.explain}>
                     {r.label}
                     {r.hint && <div className="mt-1 max-w-[240px] text-[13px] leading-[18px] text-muted">{r.hint}</div>}
                   </th>

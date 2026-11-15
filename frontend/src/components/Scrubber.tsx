@@ -91,16 +91,17 @@ export default function Scrubber({ result, index, onIndex }: Props) {
             setPlaying((p) => !p);
           }}
           aria-label={playing ? "Pause playback" : "Play through the window"}
+          title={playing ? "Pause" : "Play through the whole window"}
         >
           <Icon name={playing ? "pause" : "play"} />
         </button>
         <button type="button" className={btn} disabled={prevEvent === undefined} onClick={() => prevEvent !== undefined && onIndex(prevEvent)} aria-label="Jump to previous rise or set event" title="Previous rise/set event">
           <Icon name="prev" />
         </button>
-        <button type="button" className={btn} disabled={index <= 0} onClick={() => onIndex(Math.max(0, index - 1))} aria-label="Previous sample">
+        <button type="button" className={btn} disabled={index <= 0} onClick={() => onIndex(Math.max(0, index - 1))} aria-label="Previous sample" title="Previous sample">
           <Icon name="back" />
         </button>
-        <button type="button" className={btn} disabled={index >= n - 1} onClick={() => onIndex(Math.min(n - 1, index + 1))} aria-label="Next sample">
+        <button type="button" className={btn} disabled={index >= n - 1} onClick={() => onIndex(Math.min(n - 1, index + 1))} aria-label="Next sample" title="Next sample">
           <Icon name="fwd" />
         </button>
         <button type="button" className={btn} disabled={nextEvent === undefined} onClick={() => nextEvent !== undefined && onIndex(nextEvent)} aria-label="Jump to next rise or set event" title="Next rise/set event">
