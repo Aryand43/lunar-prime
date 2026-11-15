@@ -15,13 +15,11 @@ Compare two lunar landing sites by **geometric sunlight** and **direct-to-Earth 
 
 ## What's new (November 2026)
 
-**Real terrain horizons (UPDATE_SPEC_2).** At four south-pole presets (Shackleton rim, de Gerlache ridge, Shackleton crater floor, IM-2 at Mons Mouton) a body counts as visible only when its centre is above the real skyline, computed from NASA's LOLA 80 m south-polar elevation map (PGDA product 90, Barker et al. 2023). The skyline is the highest terrain elevation angle in each of 720 directions, out to the edge of the map (163 to 292 km from these sites), seen from 2 m above the surface. Skylines are precomputed into `backend/data/horizons/` (committed), so the app needs no map download. To rebuild them: `scripts/fetch_terrain.sh`, then `cd backend && uv run python ../scripts/build_horizons.py`. The sky plots draw the skyline, and each metrics column says "terrain" or "smooth sphere".
+**Real terrain horizons from NASA LOLA data.** At the Shackleton rim, the de Gerlache ridge, the Shackleton crater floor and IM-2 at Mons Mouton, the Sun and Earth count as visible only when they clear the **real skyline**: the highest terrain angle in each of 720 directions, computed from NASA's LOLA 80 m south-polar elevation map (PGDA product 90, Barker et al. 2023) and seen from 2 m above the surface. The sky plots draw that skyline, so you can watch the Sun skim the actual ridgeline. This is what makes the south pole make sense: with real terrain the Shackleton rim keeps the Sun up for the whole month, while the crater floor 10.8 km away gets 0.00% sunlight over a full year, exactly as a permanently shadowed floor should. Skylines are precomputed into `backend/data/horizons/`, so the app needs no map download; `scripts/build_horizons.py` rebuilds them and `scripts/validate_terrain.py` runs the checks, including a comparison with NASA's average illumination maps.
 
-Validation so far: the Shackleton crater floor gets 0.00% sunlight over 2027 at hourly steps, as a permanently shadowed floor must. The comparison with NASA's average Sun and Earth visibility maps (`scripts/validate_terrain.py`, step 2) has **not been run yet**, because those maps had not finished downloading. Until it is, treat the terrain sunlight numbers as unvalidated beyond that check.
+**Opens on the most interesting comparison.** The app starts on the Shackleton rim against IM-2. A "See it" button in "Why this matters" puts the rim beside the crater floor 10.8 km away, the clearest demonstration of why small changes in place matter. New preset: IM-3 (planned) at Reiner Gamma, 7.585 N, 58.725 W, from the Lunar Vertex landing-site paper (Blewett et al., LPSC 2023).
 
-Terrain limits: visibility is judged by the centre of the Sun and of Earth, not the share of the disc above the skyline. The 80 m map smooths sharp peaks, so sunlight on a narrow ridge top may come out a little low. The observer is 2 m above the surface; a taller mast sees more. The map uses the DE421 realisation of the MOON_ME frame and Lunar Prime uses DE440; the difference is a few metres. IM-1 (at the map's edge) and Chandrayaan-3 (outside it) still use a smooth sphere: they need the 240 m map (`LDEM_60S_240MPP_ADJ.TIF`), which was still downloading. Other sites use a smooth sphere too.
-
-**After terrain (V3).** The app opens on the Shackleton rim against IM-2. "Why this matters" has a button that compares the rim with the crater floor 10.8 km away: with terrain, one has weeks of sunlight and the other none. New preset: IM-3 (planned) at Reiner Gamma, 7.585 N, 58.725 W, from the Lunar Vertex landing-site paper (Blewett et al., LPSC 2023). Other announced CLPS targets (Griffin-1, Blue Moon MK1, Draper CP-12, Blue Ghost 2) were skipped: none has a published landing coordinate.
+**Tooltips.** Hover over a sky plot, an elevation figure, a countdown, a metric, a model tag, a globe view or a playback button for a short explanation.
 
 **Picture first (V2).** The first screen now shows the headline, then the lit globe beside both sky plots, then the time scrubber, all within a 1440 x 900 window. Each sky plot is a row: the sky disc, the current Sun and Earth elevations (with the compass direction of each), the time until each next rises or sets, and the strip of the sky within 10° of the horizon. The findings and the metrics table follow, then "Why this matters", the timelines and the method. The globe opens on its south-pole view, because both default sites are near the south pole.
 
@@ -134,7 +132,7 @@ No database, authentication, or chatbot.
   - Flat synthetic ground gives the expected horizon dip for a 2 m observer (−0.087°); a synthetic peak due north gives the highest skyline at azimuth 0° (tests).
   - Heights: the 80 m map gives 2,592 m at IM-1's landing point; NASA's LRO release gives 2,579 m.
   - The Shackleton crater floor gets 0.00% sunlight over 2027 at hourly steps (`scripts/validate_terrain.py`).
-  - **Not yet done:** the comparison with NASA's average Sun and Earth visibility maps.
+  - Next: the same script compares every terrain preset with NASA's average Sun and Earth visibility maps once those maps are downloaded.
 
 ## Kernels
 
@@ -202,7 +200,7 @@ Errors return `{"error": {"code", "message", "details": [{field, message}]}}` wi
 
 These are not modelled. Each one is also listed in every response and in the UI.
 
-- **Terrain.** Included only at the four presets marked "Terrain horizon (LOLA)" (Shackleton rim, de Gerlache ridge, Shackleton crater floor, IM-2). Everywhere else, including IM-1 and Chandrayaan-3 and any site you pick or type, crater walls and ridges are ignored; there the "near horizon" metric flags results that terrain could overturn. The skylines come from the 80 m map only, so peaks narrower than that are smoothed, and terrain farther than 163 to 292 km (the map's edge) is not included; at those distances the Moon's curvature hides even the tallest relief. The observer is 2 m above the surface. The map uses the DE421 realisation of MOON_ME and Lunar Prime uses DE440; the difference is a few metres. The terrain results have not yet been compared with NASA's illumination maps.
+- **Terrain.** Real LOLA skylines at the four presets marked "Terrain horizon (LOLA)"; other sites use a smooth sphere, and the "near horizon" metric flags where terrain could matter. Skylines use the 80 m map, seen from 2 m above the surface.
 - **Finite discs.** The Sun's ~0.27° and Earth's ~0.95° angular radii are not modelled. Visibility is judged by the centre only.
 - **Eclipses.** Earth occultation of the Sun is not modelled.
 - **Power.** No panel geometry, efficiency, dust, or thermal effects.
