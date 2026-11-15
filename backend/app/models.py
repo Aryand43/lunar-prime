@@ -30,6 +30,11 @@ class SiteInput(BaseModel):
     start_utc: Optional[datetime] = Field(
         None, description="This scenario's start (ISO 8601 UTC). None means the request's start_utc."
     )
+    horizon_key: Optional[str] = Field(
+        None, max_length=64, pattern=r"^[A-Za-z0-9\-]+$",
+        description="Preset key of a precomputed terrain skyline. Ignored if no such file exists, in synthetic mode, "
+                    "or if the coordinates differ from the preset's.",
+    )
 
     @field_validator("label")
     @classmethod
@@ -128,6 +133,14 @@ class SubPoints(BaseModel):
     earth_distance_km: list[float]
 
 
+class HorizonOut(BaseModel):
+    az_deg: list[float]
+    el_deg: list[float] = Field(..., description="Skyline elevation angle (deg) above the local horizontal")
+    site_height_m: float = Field(..., description="Surface height above the 1737.4 km sphere")
+    observer_height_m: float
+    source: str
+
+
 class SiteResult(BaseModel):
     id: str
     label: str
@@ -142,6 +155,8 @@ class SiteResult(BaseModel):
     start_utc: str = Field(..., description="This scenario's window start (UTC)")
     timestamps_utc: list[str] = Field(..., description="This scenario's sample times (UTC)")
     subpoints: SubPoints = Field(..., description="Subsolar and sub-Earth points at this scenario's sample times")
+    model: Literal["terrain", "sphere"] = Field(..., description="Horizon model used for this site")
+    horizon: Optional[HorizonOut] = Field(None, description="Terrain skyline when model is 'terrain'")
 
 
 class Statement(BaseModel):

@@ -11,6 +11,12 @@ from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 KERNEL_DIR = Path(os.environ.get("LUNAR_PRIME_KERNEL_DIR", BACKEND_DIR / "kernels"))
+# Precomputed skylines (scripts/build_horizons.py), one JSON file per preset key. Committed to Git.
+HORIZON_DIR = Path(os.environ.get("LUNAR_PRIME_HORIZON_DIR", BACKEND_DIR / "data" / "horizons"))
+# LOLA elevation maps (scripts/fetch_terrain.sh). Large; not in Git. Only needed to build skylines.
+TERRAIN_DIR = Path(os.environ.get("LUNAR_PRIME_TERRAIN_DIR", BACKEND_DIR / "terrain"))
+# A terrain preset's skyline is used only while the site is within this many degrees of the preset.
+HORIZON_MATCH_DEG = 0.001
 
 # Kernels loaded at startup, in load order. (file name, kernel type, purpose)
 KERNELS: list[tuple[str, str, str]] = [
@@ -70,6 +76,11 @@ CONVENTIONS = {
         "terrain-free local horizon."
     ),
     "time": "Inputs and outputs are UTC; internal computations use TDB (SPICE ephemeris time) via naif0012.tls.",
+    "terrain": (
+        "At sites marked 'Terrain horizon (LOLA)', the skyline is the highest elevation angle of the terrain in each of "
+        "720 directions (0.5 deg apart) out to 400 km, from LOLA 80 m and 240 m south-polar maps, seen from 2 m above "
+        "the surface. A body counts as visible when its centre is above that skyline, not above 0 deg."
+    ),
     "libration": (
         "Included. Earth's apparent motion in the lunar sky comes from the DE440 lunar orientation and orbit, "
         "so Earth rises and sets at sites near the limb and poles."
@@ -77,7 +88,7 @@ CONVENTIONS = {
 }
 
 LIMITATIONS = [
-    "No terrain: local topography, crater walls and distant ridges are ignored. At polar sites this dominates real illumination.",
+    "Terrain is included only at sites marked 'Terrain horizon (LOLA)'. Other sites use a smooth sphere with an ideal horizon.",
     "Point-centre visibility: the finite discs of the Sun (~0.27 deg radius) and Earth (~0.95 deg radius) are not modelled; partial rising/setting counts by centre only.",
     "No eclipses: Earth occultation of the Sun (lunar eclipses) is not modelled, so 'sunlight' may include brief eclipse periods.",
     "Sunlight is geometric solar visibility, not electrical power: no panel orientation, efficiency, dust or thermal effects.",

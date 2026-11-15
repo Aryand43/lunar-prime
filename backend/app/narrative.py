@@ -39,6 +39,7 @@ def build(
     a_id: str, a_label: str, a: SiteMetrics,
     b_id: str, b_label: str, b: SiteMetrics,
     window_s: float, step_s: float,
+    a_terrain: bool = False, b_terrain: bool = False,
 ) -> tuple[str, list[Statement], float]:
     tol = max(2.0 * step_s, 0.005 * window_s)
     stmts: list[Statement] = []
@@ -101,20 +102,29 @@ def build(
     shorter_gap_is_better("earth_gap", "Earth outage", a.earth, b.earth,
                           "a shorter longest Earth outage")
 
+    sites = ((a_id, a_label, a, a_terrain), (b_id, b_label, b, b_terrain))
+
     # Observations: absolute conditions, stated per site.
-    for sid, label, m in ((a_id, a_label, a), (b_id, b_label, b)):
+    for sid, label, m, terr in sites:
+        horizon = "the local skyline" if terr else "the ideal horizon"
         for body, bm, name in (("sun", m.sun, "The Sun"), ("earth", m.earth, "Earth")):
             if bm.visible_fraction == 0.0:
                 stmts.append(Statement(id=f"{sid}_{body}_never", kind="observation", favors=None,
-                                       text=f"{name} never rises above the ideal horizon at {label} during this window "
+                                       text=f"{name} never rises above {horizon} at {label} during this window "
                                             f"(maximum elevation {bm.el_max_deg:.2f}°)."))
             elif bm.longest_gap is None:
                 stmts.append(Statement(id=f"{sid}_{body}_always", kind="observation", favors=None,
-                                       text=f"{name} stays above the ideal horizon at {label} for the entire window "
+                                       text=f"{name} stays above {horizon} at {label} for the entire window "
                                             f"(minimum elevation {bm.el_min_deg:.2f}°)."))
 
     # Caveats: where results are fragile with respect to terrain and finite discs.
-    for sid, label, m in ((a_id, a_label, a), (b_id, b_label, b)):
+    for sid, label, m, terr in sites:
+        if terr:
+            stmts.append(Statement(
+                id=f"{sid}_terrain_resolution", kind="caveat", favors=None,
+                text=f"At {label}, the skyline comes from 80 m and 240 m LOLA maps, so features smaller than that are not resolved.",
+            ))
+            continue
         for body, bm, name in (("sun", m.sun, "the Sun"), ("earth", m.earth, "Earth")):
             if bm.near_horizon_fraction >= 0.10:
                 stmts.append(Statement(
