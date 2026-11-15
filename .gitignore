@@ -1,0 +1,11 @@
+# SPICE kernels are large binaries downloaded by scripts/fetch_kernels.sh
+backend/kernels/*
+!backend/kernels/README.md
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+.DS_Store

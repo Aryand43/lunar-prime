@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #0a0b0d;
+  --color-panel: #0f1114;
+  --color-panel-2: #14171b;
+  --color-line: #22262d;
+  --color-line-strong: #2f343c;
+  --color-text: #e4e6ea;
+  --color-muted: #8b919b;
+  --color-faint: #5d636c;
+  --color-accent: #5ec4b6;
+  --color-sun: #f2b84b;
+  --color-earth: #6b9cff;
+  --color-both: #d4d7dc;
+  --color-danger: #f07167;
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+html,
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+body {
+  font-family: var(--font-sans);
+  font-feature-settings: "tnum" 1;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+input[type="number"]::-webkit-inner-spin-button {
+  opacity: 0.4;
+}
+
+input[type="range"] {
+  accent-color: var(--color-accent);
+}
+
+/* datetime-local picker icon on dark backgrounds */
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.7);
+}
+
+.js-plotly-plot .plotly .modebar {
+  background: transparent !important;
+}
