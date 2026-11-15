@@ -14,6 +14,7 @@ export interface SiteDraft {
 
 export interface WindowDraft {
   start: string; // "YYYY-MM-DDTHH:mm", interpreted as UTC
+  startB: string | null; // site B's own start (same format), or null when B uses the shared start
   durationDays: string;
   stepMinutes: number;
   mode: Mode;
@@ -48,23 +49,29 @@ export function sampleCount(w: WindowDraft): number | null {
   return Math.floor(minutes / w.stepMinutes + 1e-9) + 1 + (minutes % w.stepMinutes > 1e-6 ? 1 : 0);
 }
 
-export function windowErrors(w: WindowDraft, maxSamples: number, coverage?: [string | null, string | null]) {
-  const e: { start?: string; duration?: string; samples?: string } = {};
-  const t = Date.parse(w.start + ":00Z");
-  if (!w.start || Number.isNaN(t)) e.start = "Enter a valid UTC date and time.";
-  else if (coverage?.[0] && coverage?.[1]) {
-    const d = Number(w.durationDays);
+function startError(start: string, durationDays: string, coverage?: [string | null, string | null]): string | undefined {
+  const t = Date.parse(start + ":00Z");
+  if (!start || Number.isNaN(t)) return "Enter a valid UTC date and time.";
+  if (coverage?.[0] && coverage?.[1]) {
+    const d = Number(durationDays);
     if (t < Date.parse(coverage[0]) || t + d * 86400e3 > Date.parse(coverage[1])) {
-      e.start = `Window must lie within kernel coverage (${coverage[0].slice(0, 10)} to ${coverage[1].slice(0, 10)}).`;
+      return `Window must lie within kernel coverage (${coverage[0].slice(0, 10)} to ${coverage[1].slice(0, 10)}).`;
     }
   }
+  return undefined;
+}
+
+export function windowErrors(w: WindowDraft, maxSamples: number, coverage?: [string | null, string | null]) {
+  const e: { start?: string; startB?: string; duration?: string; samples?: string } = {};
+  e.start = startError(w.start, w.durationDays, coverage);
+  if (w.startB !== null) e.startB = startError(w.startB, w.durationDays, coverage);
   const d = Number(w.durationDays);
   if (!Number.isFinite(d) || d * 24 < 1) e.duration = "Duration must be at least 1 hour (0.042 d).";
   else if (d > 366) e.duration = "Duration must be 366 days or less.";
   else if (w.stepMinutes > d * 1440) e.duration = "Duration must be at least one sampling step.";
   const n = sampleCount(w);
   if (n !== null && n > maxSamples) e.samples = `${n.toLocaleString()} samples exceeds the ${maxSamples.toLocaleString()} limit. Use a coarser step or a shorter window.`;
-  return e;
+  return Object.fromEntries(Object.entries(e).filter(([, v]) => v)) as typeof e;
 }
 
 const inputCls =
@@ -81,13 +88,15 @@ function FieldError({ id, msg }: { id: string; msg?: string }) {
 }
 
 export function SiteCard({
-  letter, draft, onChange, picking, onTogglePick,
+  letter, draft, onChange, picking, onTogglePick, onSameAsA,
 }: {
   letter: "A" | "B";
   draft: SiteDraft;
   onChange: (d: SiteDraft) => void;
   picking: boolean;
   onTogglePick: () => void;
+  /** Site B only: copy site A's label and coordinates. */
+  onSameAsA?: () => void;
 }) {
   const uid = useId();
   const err = siteErrors(draft);
@@ -176,6 +185,15 @@ export function SiteCard({
       </div>
       <FieldError id={`${uid}-lat-err`} msg={err.lat} />
       <FieldError id={`${uid}-lon-err`} msg={err.lon} />
+      {onSameAsA && (
+        <button
+          type="button"
+          onClick={onSameAsA}
+          className="mt-3 rounded-[2px] border border-line bg-field px-2 py-1 text-[13px] text-text hover:border-text"
+        >
+          Same place as A
+        </button>
+      )}
     </fieldset>
   );
 }
@@ -210,6 +228,34 @@ export function WindowCard({
       <p id={`${uid}-start-hint`} className={`mt-1 text-[13px] ${err.start ? "text-danger" : "text-muted"}`}>
         {err.start ?? "Interpreted as UTC, not your local time zone."}
       </p>
+
+      <label className="mt-3 flex cursor-pointer items-start gap-2 text-[14px] text-text">
+        <input
+          type="checkbox"
+          className="mt-[3px] accent-[var(--color-text)]"
+          checked={draft.startB !== null}
+          onChange={(e) => onChange({ ...draft, startB: e.target.checked ? draft.start : null })}
+        />
+        Site B starts on a different date
+      </label>
+      {draft.startB !== null && (
+        <>
+          <label htmlFor={`${uid}-startB`} className={labelCls + " mt-3"}>Start for site B (UTC)</label>
+          <input
+            id={`${uid}-startB`}
+            type="datetime-local"
+            className={inputCls}
+            value={draft.startB}
+            step={60}
+            aria-invalid={!!err.startB}
+            aria-describedby={`${uid}-startB-hint`}
+            onChange={(e) => onChange({ ...draft, startB: e.target.value })}
+          />
+          <p id={`${uid}-startB-hint`} className={`mt-1 text-[13px] ${err.startB ? "text-danger" : "text-muted"}`}>
+            {err.startB ?? "Same duration and sampling as site A. Site B may be the same place as A."}
+          </p>
+        </>
+      )}
 
       <label htmlFor={`${uid}-dur`} className={labelCls + " mt-4"}>Duration (days)</label>
       <input

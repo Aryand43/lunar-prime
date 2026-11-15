@@ -97,8 +97,13 @@ export function MetricsTable({ result, explain = false }: { result: CompareRespo
         <thead>
           <tr className="border-b border-line text-left align-top text-[13px] text-muted">
             <th scope="col" className="py-2 pr-3 font-normal">Metric</th>
-            <th scope="col" className="py-2 pr-3 font-normal"><span className="mr-1.5 font-bold text-text">A</span>{a.label}</th>
-            <th scope="col" className="py-2 font-normal"><span className="mr-1.5 font-bold text-text">B</span>{b.label}</th>
+            {[a, b].map((s, k) => (
+              <th key={s.id} scope="col" className={`py-2 font-normal ${k === 0 ? "pr-3" : ""}`}>
+                <span className="mr-1.5 font-bold text-text">{k === 0 ? "A" : "B"}</span>
+                {s.label}
+                {result.metadata.starts_differ && <div className="text-text tabular-nums">from {fmtUtc(s.start_utc).slice(0, 16)} UTC</div>}
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
@@ -316,6 +321,7 @@ export function WindowsList({ result }: { result: CompareResponse }) {
             <h3 className="mb-3 flex items-center gap-2.5 text-[15px] font-bold">
               <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-text text-[13px] text-bg">{k === 0 ? "A" : "B"}</span>
               {s.label}
+              {result.metadata.starts_differ && <span className="font-normal text-muted">from {fmtUtc(s.start_utc).slice(0, 16)} UTC</span>}
             </h3>
             <div className="grid grid-cols-1 gap-8 xl:grid-cols-2">
               <WindowTable title="Sun up" ink="var(--color-sun-ink)" intervals={s.intervals.sun} />

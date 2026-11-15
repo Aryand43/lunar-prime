@@ -32,43 +32,72 @@ def sample_times(et0: float, duration_s: float, step_s: float) -> np.ndarray:
     return ets
 
 
+class _Scenario:
+    """Sample times, body vectors and sub-points for one window start. Shared when both sites use the same start."""
+
+    def __init__(self, provider: EphemerisProvider, start: datetime, duration_s: float, step_s: float):
+        self.start = start
+        self.et0 = provider.utc_to_et(start)
+        self.et1 = self.et0 + duration_s
+        if provider.mode == "spice":
+            if self.et0 < kernels.STATUS.coverage_start_et or self.et1 > kernels.STATUS.coverage_end_et:
+                raise ComputeError(
+                    f"The window must lie within the loaded kernel coverage "
+                    f"({kernels.STATUS.coverage_start_utc} to {kernels.STATUS.coverage_end_utc})."
+                )
+        self.ets = sample_times(self.et0, duration_s, step_s)
+        if len(self.ets) > config.MAX_SAMPLES:
+            raise ComputeError(f"{len(self.ets):,} samples exceeds the limit of {config.MAX_SAMPLES:,}")
+        self.body_vecs = {b: provider.body_vectors(b, self.ets) for b in config.BODIES}
+        ss_lat, ss_lon, _ = sub_point(self.body_vecs["sun"])
+        se_lat, se_lon, e_dist = sub_point(self.body_vecs["earth"])
+        self.subpoints = SubPoints(
+            subsolar_lat_deg=_r(ss_lat, 4), subsolar_lon_deg=_r(ss_lon, 4),
+            sub_earth_lat_deg=_r(se_lat, 4), sub_earth_lon_deg=_r(se_lon, 4),
+            earth_distance_km=_r(e_dist, 1),
+        )
+        self.timestamps = provider.et_to_utc(self.ets)
+
+
+def _start_label(start: datetime, other: datetime) -> str:
+    """Date for narrative labels; adds the time of day when both starts fall on the same date."""
+    if start.date() == other.date():
+        return start.strftime("%Y-%m-%d %H:%M UTC")
+    return start.strftime("%Y-%m-%d")
+
+
 def run_compare(req: CompareRequest, provider: EphemerisProvider) -> CompareResponse:
     t_start = time.perf_counter()
     duration_s = req.duration_hours * 3600.0
     step_s = req.step_minutes * 60.0
 
-    et0 = provider.utc_to_et(req.start_utc)
-    et1 = et0 + duration_s
-    if provider.mode == "spice":
-        if et0 < kernels.STATUS.coverage_start_et or et1 > kernels.STATUS.coverage_end_et:
-            raise ComputeError(
-                f"The window must lie within the loaded kernel coverage "
-                f"({kernels.STATUS.coverage_start_utc} to {kernels.STATUS.coverage_end_utc})."
-            )
-
-    ets = sample_times(et0, duration_s, step_s)
-    if len(ets) > config.MAX_SAMPLES:
-        raise ComputeError(f"{len(ets):,} samples exceeds the limit of {config.MAX_SAMPLES:,}")
-
-    body_vecs = {b: provider.body_vectors(b, ets) for b in config.BODIES}
-    ss_lat, ss_lon, _ = sub_point(body_vecs["sun"])
-    se_lat, se_lon, e_dist = sub_point(body_vecs["earth"])
+    # One scenario per distinct start. When both sites use the request's start (the usual case),
+    # the geometry is computed once, so such requests cost the same as before scenarios existed.
+    starts = [site.start_utc or req.start_utc for site in req.sites]
+    scenarios: dict[datetime, _Scenario] = {}
+    for st in starts:
+        if st not in scenarios:
+            scenarios[st] = _Scenario(provider, st, duration_s, step_s)
+    starts_differ = len(scenarios) > 1
 
     def to_utc(et: float) -> str:
         return provider.et_to_utc(np.array([et]))[0]
 
-    def interval_out(iv: list[tuple[float, float]]) -> list[IntervalOut]:
-        return [
-            IntervalOut(
-                start_utc=to_utc(s), end_utc=to_utc(e), duration_s=round(e - s, 1),
-                starts_at_window_start=s <= et0, ends_at_window_end=e >= et1,
-            )
-            for s, e in iv
-        ]
-
     n_refined_total = 0
     site_results: list[SiteResult] = []
-    for site in req.sites:
+    for site, st in zip(req.sites, starts):
+        sc = scenarios[st]
+        et0, et1, ets, body_vecs = sc.et0, sc.et1, sc.ets, sc.body_vecs
+
+        def interval_out(iv: list[tuple[float, float]], et0: float = et0, et1: float = et1) -> list[IntervalOut]:
+            return [
+                IntervalOut(
+                    start_utc=to_utc(s), end_utc=to_utc(e), duration_s=round(e - s, 1),
+                    starts_at_window_start=s <= et0, ends_at_window_end=e >= et1,
+                )
+                for s, e in iv
+            ]
+
         r = site_vector(site.lat_deg, site.lon_deg)
         basis = enu_basis(site.lat_deg, site.lon_deg)
         series: dict[str, tuple[np.ndarray, np.ndarray]] = {}
@@ -78,7 +107,7 @@ def run_compare(req: CompareRequest, provider: EphemerisProvider) -> CompareResp
             az, el, _ = topocentric_az_el(body_vecs[body], r, basis)
             series[body] = (az, el)
 
-            def el_fn(t: float, body=body) -> float:
+            def el_fn(t: float, body=body, r=r, basis=basis) -> float:
                 return float(topocentric_az_el(provider.body_vectors(body, np.array([t])), r, basis)[1][0])
 
             iv, n_ref = analysis.visible_intervals(ets, el, el_fn, config.REFINE_TOLERANCE_S)
@@ -114,11 +143,19 @@ def run_compare(req: CompareRequest, provider: EphemerisProvider) -> CompareResp
                 sun=body_metrics["sun"], earth=body_metrics["earth"],
                 both_duration_s=round(both_s, 1), both_fraction=round(both_s / duration_s, 6),
             ),
+            start_utc=sc.timestamps[0],
+            timestamps_utc=sc.timestamps,
+            subpoints=sc.subpoints,
         ))
 
     a, b = site_results
+    a_name, b_name = a.label, b.label
+    if starts_differ:
+        # Name the dates in the findings so sentences stay unambiguous (even for the same place twice).
+        a_name = f"{a.label} (from {_start_label(starts[0], starts[1])})"
+        b_name = f"{b.label} (from {_start_label(starts[1], starts[0])})"
     headline, statements, tol = narrative.build(
-        a.id, a.label, a.metrics, b.id, b.label, b.metrics, duration_s, step_s
+        a.id, a_name, a.metrics, b.id, b_name, b.metrics, duration_s, step_s
     )
 
     if provider.mode == "spice":
@@ -136,22 +173,18 @@ def run_compare(req: CompareRequest, provider: EphemerisProvider) -> CompareResp
         )
         kernel_list, toolkit = [], None
 
-    timestamps = provider.et_to_utc(ets)
+    sa = scenarios[starts[0]]  # top-level fields describe scenario A
     return CompareResponse(
-        timestamps_utc=timestamps,
-        elapsed_s=_r(ets - et0, 1),
+        timestamps_utc=sa.timestamps,
+        elapsed_s=_r(sa.ets - sa.et0, 1),  # identical for both scenarios: same duration and step
         sites=site_results,
-        subpoints=SubPoints(
-            subsolar_lat_deg=_r(ss_lat, 4), subsolar_lon_deg=_r(ss_lon, 4),
-            sub_earth_lat_deg=_r(se_lat, 4), sub_earth_lon_deg=_r(se_lon, 4),
-            earth_distance_km=_r(e_dist, 1),
-        ),
+        subpoints=sa.subpoints,
         comparison=Comparison(headline=headline, statements=statements, tolerance_s=round(tol, 1)),
         metadata=Metadata(
             mode=provider.mode, provenance=provenance,
             computed_at_utc=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            window_start_utc=timestamps[0], window_end_utc=timestamps[-1],
-            window_duration_s=duration_s, step_s=step_s, n_samples=len(ets),
+            window_start_utc=sa.timestamps[0], window_end_utc=sa.timestamps[-1],
+            window_duration_s=duration_s, starts_differ=starts_differ, step_s=step_s, n_samples=len(sa.ets),
             refinement_tolerance_s=config.REFINE_TOLERANCE_S, n_refined_transitions=n_refined_total,
             conventions=config.CONVENTIONS, limitations=config.LIMITATIONS,
             kernels=kernel_list, toolkit_version=toolkit,

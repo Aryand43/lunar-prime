@@ -34,6 +34,7 @@ function buildRequest(sites: SiteDraft[], w: WindowDraft): CompareRequest {
       label: s.label.trim(),
       lat_deg: Number(s.lat),
       lon_deg: Number(s.lon),
+      ...(i === 1 && w.startB !== null ? { start_utc: `${w.startB}:00Z` } : {}),
     })) as CompareRequest["sites"],
     start_utc: `${w.start}:00Z`,
     duration_hours: Number(w.durationDays) * 24,
@@ -70,7 +71,7 @@ export default function LunarPrimeApp() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
   const [sites, setSites] = useState<SiteDraft[]>(DEFAULT_SITES.map(presetDraft));
-  const [win, setWin] = useState<WindowDraft>({ start: "2026-12-01T00:00", durationDays: "29.53", stepMinutes: 30, mode: "spice" });
+  const [win, setWin] = useState<WindowDraft>({ start: "2026-12-01T00:00", startB: null, durationDays: "29.53", stepMinutes: 30, mode: "spice" });
   const [result, setResult] = useState<CompareResponse | null>(null);
   const [lastReq, setLastReq] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -81,6 +82,7 @@ export default function LunarPrimeApp() {
   const [tab, setTab] = useState<"compare" | "route">("compare");
   const [routeMounted, setRouteMounted] = useState(false);
   const [explain, setExplain] = useState(true);
+  const [lightFor, setLightFor] = useState<0 | 1>(0);
   const abortRef = useRef<AbortController | null>(null);
   const autoRan = useRef(false);
 
@@ -120,7 +122,7 @@ export default function LunarPrimeApp() {
         setHealth(h);
         if (h.spice_available && !autoRan.current) {
           autoRan.current = true;
-          run(buildRequest(DEFAULT_SITES.map(presetDraft), { start: "2026-12-01T00:00", durationDays: "29.53", stepMinutes: 30, mode: "spice" }));
+          run(buildRequest(DEFAULT_SITES.map(presetDraft), { start: "2026-12-01T00:00", startB: null, durationDays: "29.53", stepMinutes: 30, mode: "spice" }));
         }
       })
       .catch((e) => {
@@ -166,8 +168,11 @@ export default function LunarPrimeApp() {
   };
 
   const i = result ? Math.min(index, result.timestamps_utc.length - 1) : 0;
-  const subsolar = result ? { lat: result.subpoints.subsolar_lat_deg[i], lon: result.subpoints.subsolar_lon_deg[i] } : null;
-  const subEarth = result ? { lat: result.subpoints.sub_earth_lat_deg[i], lon: result.subpoints.sub_earth_lon_deg[i] } : null;
+  const startsDiffer = result?.metadata.starts_differ ?? false;
+  // The globe can be lit for one date only. When the two sites start on different dates, light it for the chosen one.
+  const sp = result ? (startsDiffer ? result.sites[lightFor].subpoints : result.subpoints) : null;
+  const subsolar = sp ? { lat: sp.subsolar_lat_deg[i], lon: sp.subsolar_lon_deg[i] } : null;
+  const subEarth = sp ? { lat: sp.sub_earth_lat_deg[i], lon: sp.sub_earth_lon_deg[i] } : null;
   const globeSites = sites
     .map((s, k) => ({ letter: LETTERS[k], label: s.label || `Site ${LETTERS[k]}`, lat: Number(s.lat), lon: Number(s.lon) }))
     .filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lon) && Math.abs(s.lat) <= 90 && Math.abs(s.lon) <= 180);
@@ -242,6 +247,7 @@ export default function LunarPrimeApp() {
               onChange={(d) => setSites((prev) => prev.map((p, j) => (j === k ? d : p)))}
               picking={picking === LETTERS[k]}
               onTogglePick={() => setPicking((p) => (p === LETTERS[k] ? null : LETTERS[k]))}
+              onSameAsA={k === 1 ? () => setSites((prev) => [prev[0], { ...prev[0] }]) : undefined}
             />
           ))}
           <WindowCard draft={win} onChange={setWin} maxSamples={maxSamples} coverage={coverage} />
@@ -347,10 +353,28 @@ export default function LunarPrimeApp() {
                     Click the Moon to place site {picking}. Press Esc to cancel.
                   </span>
                 )}
+                {startsDiffer && !picking && (
+                  <div className="pointer-events-auto flex gap-1" role="group" aria-label="Light the globe for the date of">
+                    {([0, 1] as const).map((k) => (
+                      <button
+                        key={k}
+                        type="button"
+                        aria-pressed={lightFor === k}
+                        onClick={() => setLightFor(k)}
+                        className={`rounded-[2px] border px-2.5 py-1 text-[13px] ${
+                          lightFor === k ? "border-white bg-white text-black" : "border-[#55585c] bg-black/60 text-[#D9DAD8] hover:border-white"
+                        }`}
+                      >
+                        Light for {LETTERS[k]}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="pointer-events-none absolute inset-x-0 bottom-0 p-3 text-[13px] leading-[18px] text-[#D9DAD8]">
                 {result ? (
                   <>
+                    {startsDiffer && <b className="text-white">Lit for site {LETTERS[lightFor]}&apos;s date. </b>}
                     Subsolar point ({subsolar!.lat.toFixed(2)}°, {subsolar!.lon.toFixed(2)}°). Sub-Earth point ({subEarth!.lat.toFixed(2)}°,{" "}
                     {subEarth!.lon.toFixed(2)}°).
                     {stale && <span className="font-bold text-white"> Markers show edited inputs; results are from the previous run.</span>}
@@ -369,8 +393,8 @@ export default function LunarPrimeApp() {
                       site={s}
                       letter={LETTERS[k]}
                       index={i}
-                      timeUtc={result.timestamps_utc[i]}
-                      windowEndUtc={result.metadata.window_end_utc}
+                      timeUtc={s.timestamps_utc[i]}
+                      windowEndUtc={s.timestamps_utc[s.timestamps_utc.length - 1]}
                       explain={explain}
                     />
                   ))
@@ -391,7 +415,7 @@ export default function LunarPrimeApp() {
           <div className={`space-y-10 transition-opacity ${loading || stale ? "opacity-60" : ""}`}>
             <Panel title="Visibility timelines" aside={<span className="text-[13px] text-muted">Click the chart to set the time.</span>}>
               {result ? (
-                <Timelines result={result} index={i} onSelectTime={onSelectTime} />
+                <Timelines result={result} index={i} onSelectTime={onSelectTime} onSelectIndex={setIndex} />
               ) : (
                 <div className="flex h-[470px] items-center justify-center text-[13px] text-muted">
                   {loading ? "Computing geometry with SPICE…" : "No results yet."}

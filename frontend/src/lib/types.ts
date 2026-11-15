@@ -7,6 +7,8 @@ export interface SiteInput {
   label: string;
   lat_deg: number;
   lon_deg: number;
+  /** This scenario's start (ISO 8601 UTC). Omitted means the request's start_utc. */
+  start_utc?: string;
 }
 
 export interface CompareRequest {
@@ -58,6 +60,14 @@ export interface SiteMetrics {
 
 export type Lane = "sun" | "earth" | "both";
 
+export interface SubPoints {
+  subsolar_lat_deg: number[];
+  subsolar_lon_deg: number[];
+  sub_earth_lat_deg: number[];
+  sub_earth_lon_deg: number[];
+  earth_distance_km: number[];
+}
+
 export interface SiteResult {
   id: string;
   label: string;
@@ -69,6 +79,10 @@ export interface SiteResult {
   masks: Record<Lane, boolean[]>;
   intervals: Record<Lane, IntervalOut[]>;
   metrics: SiteMetrics;
+  /** This scenario's window start, sample times and sub-points (they differ from site A's when starts differ). */
+  start_utc: string;
+  timestamps_utc: string[];
+  subpoints: SubPoints;
 }
 
 export interface Statement {
@@ -93,6 +107,7 @@ export interface Metadata {
   window_start_utc: string;
   window_end_utc: string;
   window_duration_s: number;
+  starts_differ: boolean;
   step_s: number;
   n_samples: number;
   refinement_tolerance_s: number;
@@ -108,13 +123,7 @@ export interface CompareResponse {
   timestamps_utc: string[];
   elapsed_s: number[];
   sites: [SiteResult, SiteResult];
-  subpoints: {
-    subsolar_lat_deg: number[];
-    subsolar_lon_deg: number[];
-    sub_earth_lat_deg: number[];
-    sub_earth_lon_deg: number[];
-    earth_distance_km: number[];
-  };
+  subpoints: SubPoints;
   comparison: { headline: string; statements: Statement[]; tolerance_s: number };
   metadata: Metadata;
 }
