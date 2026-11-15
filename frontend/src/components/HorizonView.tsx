@@ -96,6 +96,20 @@ function Countdown({ name, ink, c }: { name: string; ink: string; c: NextChange 
   );
 }
 
+/** Current elevation as a large figure; grey with "below horizon" when the body is down. */
+function BigElevation({ name, ink, el }: { name: string; ink: string; el: number }) {
+  const up = el > 0;
+  return (
+    <p className="flex items-baseline gap-2 whitespace-nowrap">
+      <span className="text-[24px] leading-[30px] font-bold tabular-nums" style={{ color: up ? ink : MUTED }}>
+        {name} {el >= 0 ? "+" : "−"}
+        {Math.abs(el).toFixed(1)}°
+      </span>
+      {!up && <span className="text-[13px] text-muted">below horizon</span>}
+    </p>
+  );
+}
+
 function Readout({ name, fill, ink, az, el }: { name: string; fill: string; ink: string; az: number; el: number }) {
   const up = el > 0;
   return (
@@ -176,6 +190,10 @@ export default function HorizonView({ site, letter, index, timeUtc, windowEndUtc
         </p>
       </header>
       <div className="flex flex-col items-start gap-3">
+        <div className="space-y-0.5">
+          <BigElevation name="Sun" ink={SUN_INK} el={sun.el} />
+          <BigElevation name="Earth" ink={EARTH_INK} el={earth.el} />
+        </div>
         <svg
           width={S}
           height={S}
