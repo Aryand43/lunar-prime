@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ApiError, fetchHealth, postRoute } from "@/lib/api";
-import { fmtDuration, fmtUtc } from "@/lib/format";
+import { fmtUtc } from "@/lib/format";
 import { greatCircleArc } from "@/lib/geo";
 import { DEMO_PARAMS, DEMO_START, DEMO_WAYPOINTS, SOUTH_POLE, type BaseDraft, type PlannerParams } from "@/lib/routeDemo";
 import type { RouteRequest, RouteResponse } from "@/lib/routeTypes";
@@ -122,12 +122,12 @@ function RouteScrubber({ res, index, onIndex }: { res: RouteResponse; index: num
       <input type="range" min={0} max={n - 1} value={index} onChange={(e) => { setPlaying(false); onIndex(Number(e.target.value)); }} className="min-w-[140px] flex-1" aria-label="Route time" aria-valuetext={fmtUtc(tr.time_utc[index])} />
       <div className="flex flex-wrap items-baseline gap-x-2 text-[13px] tabular-nums">
         <span className="text-text">{fmtUtc(tr.time_utc[index])}</span>
-        <span className="text-muted">T+{fmtDuration(tr.elapsed_s[index])}</span>
+        <span className="text-muted">day {(tr.elapsed_s[index] / 86400).toFixed(1)}</span>
         <span className={tr.status[index] === "move" ? "text-text font-bold" : "text-muted"}>
           {seg ? (seg.kind === "move" ? `moving ${seg.base_id}→${seg.to_id}` : `waiting at ${seg.base_id}`) : ""}
         </span>
-        <span className={tr.sun_el_deg[index] > 0 ? "text-sun-ink" : "text-muted"}>☉ {tr.sun_el_deg[index].toFixed(2)}°</span>
-        <span className={tr.earth_el_deg[index] > 0 ? "text-earth-ink" : "text-muted"}>⊕ {tr.earth_el_deg[index].toFixed(2)}°</span>
+        <span className={tr.sun_el_deg[index] > 0 ? "text-sun-ink" : "text-muted"}>Sun {tr.sun_el_deg[index].toFixed(2)}°</span>
+        <span className={tr.earth_el_deg[index] > 0 ? "text-earth-ink" : "text-muted"}>Earth {tr.earth_el_deg[index].toFixed(2)}°</span>
       </div>
     </div>
   );
@@ -280,7 +280,7 @@ export default function RoutePlanner({ active }: { active: boolean }) {
 
   return (
     <div className="grid flex-1 grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)]">
-      <aside className="space-y-8 border-b border-line p-3 lg:sticky lg:top-12 lg:h-[calc(100vh-3rem)] lg:overflow-y-auto lg:border-r lg:border-b-0">
+      <aside className="space-y-8 border-b border-line p-6 lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto lg:border-r lg:border-b-0">
         <EndpointCard title="Start" draft={start} onChange={setStart} picking={picking === "start"} onTogglePick={() => setPicking((x) => (x === "start" ? null : "start"))} />
         <EndpointCard title="Destination" draft={dest} onChange={(d) => { setDest(d); setCustomDest(true); }} picking={picking === "dest"} onTogglePick={() => setPicking((x) => (x === "dest" ? null : "dest"))}>
           {customDest ? (
@@ -294,7 +294,7 @@ export default function RoutePlanner({ active }: { active: boolean }) {
         <WaypointList items={wps} onChange={setWps} picking={picking} onTogglePick={(uid) => setPicking((x) => (x === uid ? null : uid))} onReset={() => setWps(DEMO_WAYPOINTS)} />
         <ScheduleCard p={p} onChange={setP} />
         <ObjectiveCard p={p} onChange={setP} />
-        <div className="sticky bottom-0 -mx-3 -mb-3 space-y-2 border-t border-line bg-bg/95 p-3 ">
+        <div className="sticky bottom-0 -mx-6 -mb-6 space-y-2 border-t border-line bg-bg px-6 py-4 ">
           <button
             type="button"
             disabled={!request || loading}
@@ -307,7 +307,7 @@ export default function RoutePlanner({ active }: { active: boolean }) {
         </div>
       </aside>
 
-      <main className="min-w-0 space-y-10 p-6">
+      <main className="min-w-0 space-y-10 px-6 py-8 xl:px-10">
         <div role="note" className="border border-text bg-field px-3 py-2 text-[14px] text-text">
           {DISCLAIMER}
           <span className="block text-[13px] font-normal text-muted">
@@ -327,7 +327,7 @@ export default function RoutePlanner({ active }: { active: boolean }) {
         )}
         {health && !health.spice_available && p.mode === "spice" && (
           <div role="alert" className="border border-text bg-field p-3 text-[13px]">
-            <p className="font-bold text-sun-ink">SPICE kernels unavailable: the planner will not fall back to synthetic data on its own.</p>
+            <p className="font-bold text-text">SPICE kernels unavailable: the planner will not fall back to synthetic data on its own.</p>
             <p className="mt-1">{health.error}</p>
             <button type="button" onClick={() => setP((x) => ({ ...x, mode: "synthetic" }))} className="mt-2 rounded-[2px] border border-text px-2 py-1 text-[13px] text-text hover:bg-bg">
               Use synthetic demo data (not scientific)
@@ -393,7 +393,7 @@ export default function RoutePlanner({ active }: { active: boolean }) {
               </div>
               <div>
                 Globe shading is illustrative (lit from the computed subsolar point, with extra ambient light); use the elevation values for analysis.
-                {stale && <span className="text-sun-ink"> Inputs changed: paths show the previous result.</span>}
+                {stale && <span className="font-bold text-white"> Inputs changed: paths show the previous result.</span>}
               </div>
             </div>
           </div>

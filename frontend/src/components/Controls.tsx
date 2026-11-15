@@ -68,8 +68,8 @@ export function windowErrors(w: WindowDraft, maxSamples: number, coverage?: [str
 }
 
 const inputCls =
-  "w-full rounded-[2px] border border-line bg-field px-2 py-1.5 tabular-nums text-[13px] text-text placeholder:text-muted focus:border-text focus:outline-none aria-[invalid=true]:border-danger";
-const labelCls = "mb-1 block text-[13px] text-muted";
+  "w-full rounded-[2px] border border-line bg-field px-3 py-2 tabular-nums text-[14px] text-text placeholder:text-muted focus:border-text focus:outline-none aria-[invalid=true]:border-danger";
+const labelCls = "mb-1.5 block text-[13px] text-muted";
 
 function FieldError({ id, msg }: { id: string; msg?: string }) {
   if (!msg) return null;
@@ -95,11 +95,11 @@ export function SiteCard({
   const set = (patch: Partial<SiteDraft>) => onChange({ ...draft, ...patch, presetKey: patch.presetKey ?? "custom" });
 
   return (
-    <fieldset className="p-3">
+    <fieldset>
       <legend className="sr-only">Site {letter}</legend>
-      <div className="mb-2.5 flex items-center justify-between">
-        <span className="flex items-center gap-2 text-sm font-bold">
-          <span className="flex h-5 w-5 items-center justify-center rounded-[2px] border border-line text-[13px] font-bold">{letter}</span>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <span className="flex items-center gap-2.5 text-[18px] leading-[24px] font-bold">
+          <span className="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-text text-[13px] font-bold text-bg">{letter}</span>
           Site {letter}
         </span>
         <button
@@ -107,17 +107,17 @@ export function SiteCard({
           onClick={onTogglePick}
           aria-pressed={picking}
           className={`rounded-[2px] border px-2 py-0.5 text-[13px] transition-colors ${
-            picking ? "border-text bg-text text-bg" : "border-line text-muted hover:border-line hover:text-text"
+            picking ? "border-text bg-text text-bg" : "border-line bg-field text-text hover:border-text"
           }`}
         >
-          {picking ? "Click the globe…" : "Place on globe"}
+          {picking ? `Click the Moon to place site ${letter}` : "Pick on globe"}
         </button>
       </div>
 
       <label htmlFor={`${uid}-preset`} className={labelCls}>Preset</label>
       <select
         id={`${uid}-preset`}
-        className={inputCls + " font-sans"}
+        className={inputCls}
         value={draft.presetKey}
         onChange={(e) => {
           const p = PRESETS.find((x) => x.key === e.target.value);
@@ -130,12 +130,12 @@ export function SiteCard({
         ))}
         <option value="custom">Custom coordinates</option>
       </select>
-      {preset && <p className="mt-1 text-[13px] leading-snug text-muted">{preset.note}</p>}
+      {preset && <p className="mt-1.5 text-[13px] leading-[18px] text-muted">{preset.note}</p>}
 
-      <label htmlFor={`${uid}-label`} className={labelCls + " mt-2.5"}>Label</label>
+      <label htmlFor={`${uid}-label`} className={labelCls + " mt-4"}>Label</label>
       <input
         id={`${uid}-label`}
-        className={inputCls + " font-sans"}
+        className={inputCls}
         value={draft.label}
         maxLength={64}
         aria-invalid={!!err.label}
@@ -144,7 +144,7 @@ export function SiteCard({
       />
       <FieldError id={`${uid}-label-err`} msg={err.label} />
 
-      <div className="mt-2.5 grid grid-cols-2 gap-2">
+      <div className="mt-4 grid grid-cols-2 gap-3">
         <div>
           <label htmlFor={`${uid}-lat`} className={labelCls}>Lat (°, +N)</label>
           <input
@@ -188,9 +188,9 @@ export function WindowCard({
   const err = windowErrors(draft, maxSamples, coverage);
   const n = sampleCount(draft);
   return (
-    <fieldset className="p-3">
+    <fieldset>
       <legend className="sr-only">Simulation window</legend>
-      <div className="mb-2.5 text-sm font-bold">Window</div>
+      <div className="mb-3 text-[18px] leading-[24px] font-bold">Window</div>
 
       <label htmlFor={`${uid}-start`} className={labelCls}>Start (UTC)</label>
       <input
@@ -207,7 +207,7 @@ export function WindowCard({
         {err.start ?? "Interpreted as UTC, not your local time zone."}
       </p>
 
-      <label htmlFor={`${uid}-dur`} className={labelCls + " mt-2.5"}>Duration (days)</label>
+      <label htmlFor={`${uid}-dur`} className={labelCls + " mt-4"}>Duration (days)</label>
       <input
         id={`${uid}-dur`}
         className={inputCls}
@@ -223,8 +223,8 @@ export function WindowCard({
             key={label}
             type="button"
             onClick={() => onChange({ ...draft, durationDays: String(d) })}
-            className={`rounded-[2px] border px-1.5 py-0.5 text-[13px] ${
-              Number(draft.durationDays) === d ? "border-text bg-text text-bg" : "border-line text-muted hover:text-text"
+            className={`rounded-[2px] border px-2 py-1 text-[13px] ${
+              Number(draft.durationDays) === d ? "border-text bg-text text-bg" : "border-line bg-field text-text hover:border-text"
             }`}
           >
             {label}
@@ -233,7 +233,7 @@ export function WindowCard({
       </div>
       <FieldError id={`${uid}-dur-err`} msg={err.duration} />
 
-      <label htmlFor={`${uid}-step`} className={labelCls + " mt-2.5"}>Sampling interval</label>
+      <label htmlFor={`${uid}-step`} className={labelCls + " mt-4"}>Sampling interval</label>
       <select
         id={`${uid}-step`}
         className={inputCls}
@@ -247,7 +247,7 @@ export function WindowCard({
         ))}
       </select>
       <p className={`mt-1 tabular-nums text-[13px] ${err.samples ? "text-danger" : "text-muted"}`}>
-        {err.samples ?? (n ? `${n.toLocaleString()} samples / site · limit ${maxSamples.toLocaleString()}` : "—")}
+        {err.samples ?? (n ? `${n.toLocaleString()} samples per site (limit ${maxSamples.toLocaleString()})` : "—")}
       </p>
 
       <details className="mt-3 border-t border-line pt-2">
@@ -268,7 +268,7 @@ export function WindowCard({
                 onChange={() => onChange({ ...draft, mode: m })}
               />
               <span>
-                <span className={m === "synthetic" ? "text-sun-ink" : "text-text"}>{title}</span>
+                <span className={m === "synthetic" ? "font-bold text-text" : "text-text"}>{title}</span>
                 <span className="block text-[13px] text-muted">{desc}</span>
               </span>
             </label>

@@ -5,7 +5,7 @@ import { useId } from "react";
 import { GRID_OPTIONS, type BaseDraft, type PlannerParams } from "@/lib/routeDemo";
 
 const inputCls =
-  "w-full min-w-0 rounded-[2px] border border-line bg-field px-2 py-1.5 tabular-nums text-[14px] text-text placeholder:text-muted focus:border-text focus:outline-none aria-[invalid=true]:border-danger";
+  "w-full min-w-0 rounded-[2px] border border-line bg-field px-2.5 py-1.5 tabular-nums text-[14px] text-text placeholder:text-muted focus:border-text focus:outline-none aria-[invalid=true]:border-danger";
 const labelCls = "mb-1 block text-[13px] text-muted";
 
 export function latErr(v: string) {
@@ -62,7 +62,7 @@ function PlaceBtn({ active, onClick, label }: { active: boolean; onClick: () => 
       aria-label={label}
       title={label}
       className={`flex h-[30px] shrink-0 px-2 items-center justify-center rounded-[2px] border text-[13px] ${
-        active ? "border-text bg-text text-bg" : "border-line text-muted hover:text-text"
+        active ? "border-text bg-text text-bg" : "border-line bg-field text-text hover:border-text"
       }`}
     >
       Pick
@@ -83,14 +83,14 @@ export function EndpointCard({
   const uid = useId();
   const errs = [latErr(draft.lat), lonErr(draft.lon), draft.label.trim() ? null : "Enter a label."].filter(Boolean);
   return (
-    <fieldset className="p-3">
+    <fieldset>
       <legend className="sr-only">{title}</legend>
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-sm font-bold">{title}</span>
+        <span className="text-[18px] leading-[24px] font-bold">{title}</span>
         {children}
       </div>
       <label htmlFor={`${uid}-l`} className={labelCls}>Label</label>
-      <input id={`${uid}-l`} className={inputCls + " font-sans"} value={draft.label} maxLength={64} onChange={(e) => onChange({ ...draft, label: e.target.value })} />
+      <input id={`${uid}-l`} className={inputCls} value={draft.label} maxLength={64} onChange={(e) => onChange({ ...draft, label: e.target.value })} />
       <div className="mt-2 flex items-end gap-1.5">
         <div className="flex-1">
           <label htmlFor={`${uid}-lat`} className={labelCls}>Lat (°, +N)</label>
@@ -127,10 +127,10 @@ export function WaypointList({
     onChange([...items, { uid: `wp-${id}-${Date.now()}`, id, label: `Hypothetical waypoint ${id}`, lat: "-88", lon: "0" }]);
   };
   return (
-    <fieldset className="p-3">
+    <fieldset>
       <legend className="sr-only">Candidate waypoints</legend>
       <div className="mb-1 flex items-center justify-between">
-        <span className="text-sm font-bold">Candidate waypoints</span>
+        <span className="text-[18px] leading-[24px] font-bold">Candidate waypoints</span>
         <span className="tabular-nums text-[13px] text-muted">{items.length} optional</span>
       </div>
       <p className="mb-2 text-[13px] leading-snug text-muted">
@@ -198,9 +198,9 @@ export function ScheduleCard({ p, onChange }: { p: PlannerParams; onChange: (p: 
   const e = paramErrors(p);
   const set = (k: keyof PlannerParams) => (v: string) => onChange({ ...p, [k]: v });
   return (
-    <fieldset className="space-y-2.5 p-3">
+    <fieldset className="space-y-3">
       <legend className="sr-only">Schedule and movement</legend>
-      <div className="text-sm font-bold">Schedule &amp; movement</div>
+      <div className="text-[18px] leading-[24px] font-bold">Schedule &amp; movement</div>
       <div>
         <label htmlFor={`${uid}-dep`} className={labelCls}>Departure (UTC)</label>
         <input id={`${uid}-dep`} type="datetime-local" step={60} className={inputCls} value={p.departure} aria-invalid={!!e.departure} onChange={(ev) => onChange({ ...p, departure: ev.target.value })} />
@@ -233,9 +233,9 @@ export function ObjectiveCard({ p, onChange }: { p: PlannerParams; onChange: (p:
   const e = paramErrors(p);
   const set = (k: keyof PlannerParams) => (v: string) => onChange({ ...p, [k]: v });
   return (
-    <fieldset className="space-y-2.5 p-3">
+    <fieldset className="space-y-3">
       <legend className="sr-only">Objective</legend>
-      <div className="text-sm font-bold">Objective weights</div>
+      <div className="text-[18px] leading-[24px] font-bold">Objective weights</div>
       <p className="tabular-nums text-[13px] leading-snug text-muted">
         cost = w<sub>d</sub>·km/{p.distanceScaleKm || "?"} + w<sub>☉</sub>·dark h/{p.exposureScaleHours || "?"} + w<sub>⊕</sub>·Earth-invisible h/{p.exposureScaleHours || "?"}
       </p>
@@ -266,7 +266,7 @@ export function ObjectiveCard({ p, onChange }: { p: PlannerParams; onChange: (p:
             <label key={m} className="flex cursor-pointer gap-2">
               <input type="radio" name={`${uid}-mode`} className="mt-0.5 accent-[var(--color-text)]" checked={p.mode === m} onChange={() => onChange({ ...p, mode: m })} />
               <span>
-                <span className={m === "synthetic" ? "text-sun-ink" : "text-text"}>{title}</span>
+                <span className={m === "synthetic" ? "font-bold text-text" : "text-text"}>{title}</span>
                 <span className="block text-[13px] text-muted">{desc}</span>
               </span>
             </label>
