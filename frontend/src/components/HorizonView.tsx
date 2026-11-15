@@ -68,16 +68,16 @@ function stripTrack(az: number[], el: number[], W: number, H: number) {
 function Readout({ name, color, az, el }: { name: string; color: string; az: number; el: number }) {
   const up = el > 0;
   return (
-    <div className="flex items-baseline justify-between gap-2 text-xs">
+    <div className="flex items-baseline justify-between gap-2 text-[13px]">
       <span className="flex items-center gap-1.5">
         <span className="inline-block h-2 w-2 rounded-full" style={{ background: color }} aria-hidden />
         <span className="text-text">{name}</span>
       </span>
-      <span className="font-mono tabular-nums text-muted">
+      <span className="tabular-nums text-muted">
         el <span className="text-text">{el >= 0 ? "+" : "−"}{Math.abs(el).toFixed(2)}°</span> · az{" "}
         <span className="text-text">{az.toFixed(1)}°</span> {compass(az)}
       </span>
-      <span className={`w-[70px] text-right text-[10px] uppercase tracking-wider ${up ? "text-text" : "text-faint"}`}>
+      <span className={`w-[70px] text-right text-[13px] ${up ? "text-text" : "text-muted"}`}>
         {up ? "above" : "below"} hzn
       </span>
     </div>
@@ -126,13 +126,13 @@ export default function HorizonView({ site, letter, index }: Props) {
   };
 
   return (
-    <section aria-label={`Local horizon view for site ${letter}`} className="rounded-md border border-line bg-panel p-3">
+    <section aria-label={`Local horizon view for site ${letter}`} className="p-3">
       <header className="mb-2 flex items-baseline justify-between gap-2">
-        <h3 className="truncate text-sm font-medium">
-          <span className="mr-1.5 font-semibold">{letter}</span>
+        <h3 className="truncate text-sm font-bold">
+          <span className="mr-1.5 font-bold">{letter}</span>
           {site.label}
         </h3>
-        <span className="shrink-0 font-mono text-[10px] text-muted">
+        <span className="shrink-0 tabular-nums text-[13px] text-muted">
           {fmtLat(site.lat_deg)} {fmtLon(site.lon_deg)}
         </span>
       </header>
@@ -163,7 +163,7 @@ export default function HorizonView({ site, letter, index }: Props) {
           {body(sun, SUN, "Sun")}
         </svg>
         <div className="w-full">
-          <div className="mb-1 flex justify-between text-[10px] text-faint">
+          <div className="mb-1 flex justify-between text-[13px] text-muted">
             <span>Near-horizon detail (±{STRIP_LIM}°)</span>
             <span>azimuth →</span>
           </div>
@@ -178,7 +178,7 @@ export default function HorizonView({ site, letter, index }: Props) {
             {stripDot(earth, EARTH)}
             {stripDot(sun, SUN)}
           </svg>
-          <div className="mt-0.5 flex justify-between font-mono text-[9px] text-faint">
+          <div className="mt-0.5 flex justify-between tabular-nums text-[13px] text-muted">
             <span>N 0°</span><span>E 90°</span><span>S 180°</span><span>W 270°</span><span>360°</span>
           </div>
         </div>

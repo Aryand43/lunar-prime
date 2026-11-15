@@ -72,10 +72,10 @@ export function MetricsTable({ result }: { result: CompareResponse }) {
       <table className="w-full min-w-[460px] border-collapse text-sm">
         <caption className="sr-only">Summary metrics for both sites over the selected window</caption>
         <thead>
-          <tr className="border-b border-line text-left text-[11px] uppercase tracking-wider text-muted">
-            <th scope="col" className="py-2 pr-3 font-medium">Metric</th>
-            <th scope="col" className="py-2 pr-3 font-medium"><span className="text-text">A</span> · {a.label}</th>
-            <th scope="col" className="py-2 font-medium"><span className="text-text">B</span> · {b.label}</th>
+          <tr className="border-b border-line text-left text-[13px] text-muted">
+            <th scope="col" className="py-2 pr-3 font-bold">Metric</th>
+            <th scope="col" className="py-2 pr-3 font-bold"><span className="text-text">A</span> · {a.label}</th>
+            <th scope="col" className="py-2 font-bold"><span className="text-text">B</span> · {b.label}</th>
           </tr>
         </thead>
         <tbody>
@@ -85,18 +85,18 @@ export function MetricsTable({ result }: { result: CompareResponse }) {
               <tr key={r.label} className="border-b border-line/60 align-top">
                 <th scope="row" className="py-2 pr-3 text-left font-normal text-muted">
                   {r.label}
-                  {r.hint && <div className="text-[10px] text-faint">{r.hint}</div>}
+                  {r.hint && <div className="text-[13px] text-muted">{r.hint}</div>}
                 </th>
                 {[a, b].map((s) => {
                   const v = r.value(s.metrics);
                   const win = fav === s.id;
                   return (
                     <td key={s.id} className="py-2 pr-3">
-                      <div className={`font-mono tabular-nums ${win ? "text-accent" : "text-text"}`}>
+                      <div className={`tabular-nums ${win ? "text-text font-bold" : "text-text"}`}>
                         {v.main}
                         {win && <span className="sr-only"> (favoured on this criterion)</span>}
                       </div>
-                      {v.sub && <div className="font-mono text-[11px] text-faint">{v.sub}</div>}
+                      {v.sub && <div className="tabular-nums text-[13px] text-muted">{v.sub}</div>}
                     </td>
                   );
                 })}
@@ -105,8 +105,8 @@ export function MetricsTable({ result }: { result: CompareResponse }) {
           })}
         </tbody>
       </table>
-      <p className="mt-2 text-[11px] text-faint">
-        <span className="text-accent">Teal</span> marks the site favoured on that single criterion (more time visible, or a shorter gap),
+      <p className="mt-2 text-[13px] text-muted">
+        <span className="text-text font-bold">Teal</span> marks the site favoured on that single criterion (more time visible, or a shorter gap),
         beyond a {fmtDuration(result.comparison.tolerance_s)} tolerance. It is not an overall ranking.
       </p>
     </div>
@@ -134,11 +134,11 @@ export function Findings({ result }: { result: CompareResponse }) {
         if (!items.length) return null;
         return (
           <div key={kind}>
-            <h4 className="mb-1.5 text-[11px] uppercase tracking-wider text-muted">{title}</h4>
+            <h4 className="mb-1.5 text-[13px] text-muted">{title}</h4>
             <ul className="space-y-1.5">
               {items.map((s) => (
                 <li key={s.id} className={`flex gap-2 text-[13px] leading-snug ${KIND_STYLE[kind]}`}>
-                  <span aria-hidden className={`mt-[7px] h-1 w-1 shrink-0 rounded-full ${kind === "caveat" ? "bg-sun" : "bg-faint"}`} />
+                  <span aria-hidden className={`mt-[7px] h-[5px] w-[5px] shrink-0 bg-text`} />
                   <span>{s.text}</span>
                 </li>
               ))}
@@ -146,7 +146,7 @@ export function Findings({ result }: { result: CompareResponse }) {
           </div>
         );
       })}
-      <p className="text-[11px] text-faint">
+      <p className="text-[13px] text-muted">
         Statements are generated deterministically from the computed metrics above. No language model is involved.
       </p>
     </div>
@@ -169,8 +169,8 @@ export function MethodsPanel({ result }: { result: CompareResponse }) {
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
       <div>
-        <h4 className="mb-2 text-[11px] uppercase tracking-wider text-muted">Method</h4>
-        <dl className="space-y-2 text-[12px] leading-snug">
+        <h4 className="mb-2 text-[13px] text-muted">Method</h4>
+        <dl className="space-y-2 text-[13px] leading-snug">
           {convRows.map(([k, v]) => (
             <div key={k} className="grid grid-cols-[110px_1fr] gap-3">
               <dt className="text-muted">{k}</dt>
@@ -189,33 +189,33 @@ export function MethodsPanel({ result }: { result: CompareResponse }) {
       </div>
       <div className="space-y-5">
         <div>
-          <h4 className="mb-2 text-[11px] uppercase tracking-wider text-muted">Not modelled</h4>
-          <ul className="space-y-1.5 text-[12px] leading-snug text-text">
+          <h4 className="mb-2 text-[13px] text-muted">Not modelled</h4>
+          <ul className="space-y-1.5 text-[13px] leading-snug text-text">
             {md.limitations.map((l) => (
               <li key={l} className="flex gap-2">
-                <span aria-hidden className="mt-[6px] h-1 w-1 shrink-0 rounded-full bg-faint" />
+                <span aria-hidden className="mt-[6px] h-[5px] w-[5px] shrink-0 bg-text" />
                 {l}
               </li>
             ))}
           </ul>
         </div>
         <div>
-          <h4 className="mb-2 text-[11px] uppercase tracking-wider text-muted">Data provenance</h4>
-          <p className={`mb-2 text-[12px] leading-snug ${md.mode === "synthetic" ? "text-danger" : "text-text"}`}>{md.provenance}</p>
+          <h4 className="mb-2 text-[13px] text-muted">Data provenance</h4>
+          <p className={`mb-2 text-[13px] leading-snug ${md.mode === "synthetic" ? "text-danger" : "text-text"}`}>{md.provenance}</p>
           {md.kernels.length > 0 && (
-            <ul className="space-y-1 font-mono text-[11px]">
+            <ul className="space-y-1 tabular-nums text-[13px]">
               {md.kernels.map((k) => (
                 <li key={k.name} className="flex flex-wrap items-baseline gap-x-2">
-                  <a href={k.source_url} className="text-text underline decoration-line-strong underline-offset-2 hover:decoration-accent" target="_blank" rel="noreferrer">
+                  <a href={k.source_url} className="text-text underline decoration-line underline-offset-2 hover:decoration-text" target="_blank" rel="noreferrer">
                     {k.name}
                   </a>
-                  <span className="text-faint">{k.kind}</span>
-                  <span className="text-faint" title={k.sha256 ?? ""}>sha256 {k.sha256?.slice(0, 12)}…</span>
+                  <span className="text-muted">{k.kind}</span>
+                  <span className="text-muted" title={k.sha256 ?? ""}>sha256 {k.sha256?.slice(0, 12)}…</span>
                 </li>
               ))}
             </ul>
           )}
-          <p className="mt-2 font-mono text-[11px] text-faint">
+          <p className="mt-2 tabular-nums text-[13px] text-muted">
             {md.toolkit_version ?? "no SPICE toolkit"} · computed {fmtUtc(md.computed_at_utc)} in {md.compute_time_ms.toFixed(0)} ms
           </p>
         </div>

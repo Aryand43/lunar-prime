@@ -5,6 +5,7 @@ import { useMemo } from "react";
 
 import { plotlyTime } from "@/lib/format";
 import type { CompareResponse, Lane } from "@/lib/types";
+import { INK } from "@/lib/theme";
 import PlotlyChart from "./PlotlyChart";
 
 const SUN = "#f2b84b";
@@ -89,7 +90,7 @@ export default function Timelines({ result, index, onSelectTime }: Props) {
     const cursorShapeIndex = shapes.length;
     shapes.push({
       type: "line", xref: "x", yref: "paper", x0: x[0], x1: x[0], y0: 0, y1: 1,
-      line: { color: "#5ec4b6", width: 1.5 },
+      line: { color: INK, width: 2 },
     });
 
     const axisStyle = {

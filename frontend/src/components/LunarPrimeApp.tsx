@@ -17,7 +17,7 @@ import Timelines from "./Timelines";
 
 const MoonGlobe = dynamic(() => import("./MoonGlobe"), {
   ssr: false,
-  loading: () => <div className="flex h-full items-center justify-center text-xs text-muted">Loading 3D globe…</div>,
+  loading: () => <div className="flex h-full items-center justify-center text-[13px] text-muted">Loading 3D globe…</div>,
 });
 
 const LETTERS = ["A", "B"] as const;
@@ -56,12 +56,12 @@ function nearestIndex(timestamps: string[], ms: number): number {
 
 function Panel({ title, aside, children, className = "" }: { title: string; aside?: React.ReactNode; children: React.ReactNode; className?: string }) {
   return (
-    <section className={`rounded-md border border-line bg-panel ${className}`} aria-label={title}>
-      <header className="flex items-center justify-between gap-3 border-b border-line px-4 py-2.5">
-        <h2 className="text-[13px] font-medium">{title}</h2>
+    <section className={`${className}`} aria-label={title}>
+      <header className="flex items-center justify-between gap-3 mb-3">
+        <h2 className="text-[18px] leading-[24px] font-bold">{title}</h2>
         {aside}
       </header>
-      <div className="p-4">{children}</div>
+      <div className="p-0">{children}</div>
     </section>
   );
 }
@@ -174,14 +174,14 @@ export default function LunarPrimeApp() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="sticky top-0 z-40 flex h-12 items-center justify-between gap-3 border-b border-line bg-bg/95 px-4 backdrop-blur">
+      <header className="sticky top-0 z-40 flex h-12 items-center justify-between gap-3 border-b border-line bg-bg/95 px-4 ">
         <div className="flex min-w-0 items-baseline gap-3">
-          <h1 className="text-[15px] font-semibold tracking-tight">Lunar Prime</h1>
-          <div role="tablist" aria-label="Mode" className="flex self-center rounded-md border border-line p-0.5">
+          <h1 className="text-[15px] font-bold ">Lunar Prime</h1>
+          <div role="tablist" aria-label="Mode" className="flex self-center gap-1">
             {(
               [
-                ["compare", "Compare Sites"],
-                ["route", "Route Planner"],
+                ["compare", "Compare sites"],
+                ["route", "Route planner"],
               ] as const
             ).map(([t, label]) => (
               <button
@@ -193,7 +193,7 @@ export default function LunarPrimeApp() {
                   setTab(t);
                   if (t === "route") setRouteMounted(true);
                 }}
-                className={`rounded px-2.5 py-0.5 text-[12px] ${tab === t ? "bg-panel-2 text-text" : "text-muted hover:text-text"}`}
+                className={`rounded-[2px] border px-3 py-1 text-[14px] ${tab === t ? "border-text bg-text font-bold text-bg" : "border-line text-text hover:bg-field"}`}
               >
                 {label}
               </button>
@@ -208,28 +208,28 @@ export default function LunarPrimeApp() {
         <div className={`flex items-center gap-3 ${tab === "compare" ? "" : "hidden"}`}>
           {result && (
             <span
-              className={`rounded border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider ${
-                synthetic ? "border-sun/60 text-sun" : "border-line-strong text-muted"
+              className={`rounded-[2px] border px-1.5 py-0.5 tabular-nums text-[13px] ${
+                synthetic ? "border-text font-bold text-text" : "border-line text-text"
               }`}
               title={result.metadata.provenance}
             >
               {synthetic ? "Synthetic demo data" : "SPICE · DE440 · MOON_ME"}
             </span>
           )}
-          <time className="font-mono text-[12px] tabular-nums text-text" aria-live="off" dateTime={result?.timestamps_utc[i]}>
+          <time className="text-[13px] tabular-nums text-text" aria-live="off" dateTime={result?.timestamps_utc[i]}>
             {result ? fmtUtc(result.timestamps_utc[i]) : "—— UTC"}
           </time>
         </div>
       </header>
 
       {synthetic && tab === "compare" && (
-        <div role="alert" className="border-b border-sun/40 bg-sun/10 px-4 py-1.5 text-[12px] text-sun">
+        <div role="alert" className="border-b border-text bg-field px-4 py-1.5 text-[13px] text-text">
           Synthetic demo mode: values come from a crude analytic model for UI development. They are not SPICE results and not NASA data.
         </div>
       )}
 
       <div className={tab === "compare" ? "grid flex-1 grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)]" : "hidden"}>
-        <aside className="space-y-3 border-b border-line p-3 lg:sticky lg:top-12 lg:h-[calc(100vh-3rem)] lg:overflow-y-auto lg:border-r lg:border-b-0">
+        <aside className="space-y-8 border-b border-line p-3 lg:sticky lg:top-12 lg:h-[calc(100vh-3rem)] lg:overflow-y-auto lg:border-r lg:border-b-0">
           {sites.map((s, k) => (
             <SiteCard
               key={LETTERS[k]}
@@ -241,18 +241,18 @@ export default function LunarPrimeApp() {
             />
           ))}
           <WindowCard draft={win} onChange={setWin} maxSamples={maxSamples} coverage={coverage} />
-          <div className="sticky bottom-0 -mx-3 -mb-3 space-y-2 border-t border-line bg-bg/95 p-3 backdrop-blur">
+          <div className="sticky bottom-0 -mx-3 -mb-3 space-y-2 border-t border-line bg-bg/95 p-3 ">
           <button
             type="button"
             disabled={!request || loading}
             onClick={() => request && run(request)}
-            className="w-full rounded-md bg-accent px-3 py-2 text-sm font-medium text-black transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+            className="w-full rounded-[2px] bg-text px-3 py-2 text-[15px] font-bold text-bg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {loading ? "Computing…" : "Compare sites"}
           </button>
-          {invalid && <p className="text-[11px] text-danger">Fix the highlighted fields to run a comparison.</p>}
+          {invalid && <p className="text-[13px] text-danger">Fix the highlighted fields to run a comparison.</p>}
           {health && (
-            <p className="text-[11px] leading-snug text-faint">
+            <p className="text-[13px] leading-snug text-muted">
               {health.spice_available
                 ? `SPICE kernels loaded (${health.toolkit_version}). Coverage ${health.coverage_start_utc?.slice(0, 10)} – ${health.coverage_end_utc?.slice(0, 10)}.`
                 : "SPICE kernels not loaded."}
@@ -261,31 +261,31 @@ export default function LunarPrimeApp() {
           </div>
         </aside>
 
-        <main className="min-w-0 space-y-3 p-3">
+        <main className="min-w-0 space-y-10 p-6">
           {healthError && (
-            <div role="alert" className="rounded-md border border-danger/50 bg-danger/10 p-3 text-[13px]">
-              <p className="font-medium text-danger">Backend unreachable</p>
+            <div role="alert" className="border border-danger bg-field p-3 text-[13px]">
+              <p className="font-bold text-danger">Backend unreachable</p>
               <p className="mt-1 text-text">{healthError} Start it, then reload this page:</p>
-              <pre className="mt-2 overflow-x-auto rounded bg-black/40 p-2 font-mono text-[12px] text-muted">cd backend &amp;&amp; uv run uvicorn app.main:app --port 8000</pre>
+              <pre className="mt-2 overflow-x-auto rounded-[2px] bg-bg p-2 text-[13px] text-text">cd backend &amp;&amp; uv run uvicorn app.main:app --port 8000</pre>
             </div>
           )}
           {health && !health.spice_available && (
-            <div role="alert" className="rounded-md border border-sun/50 bg-sun/5 p-3 text-[13px]">
-              <p className="font-medium text-sun">SPICE kernels unavailable — scientific results cannot be computed</p>
+            <div role="alert" className="border border-text bg-field p-3 text-[13px]">
+              <p className="font-bold text-sun-ink">SPICE kernels unavailable — scientific results cannot be computed</p>
               <p className="mt-1 text-text">{health.error}</p>
-              <pre className="mt-2 overflow-x-auto rounded bg-black/40 p-2 font-mono text-[12px] text-muted">./scripts/fetch_kernels.sh   # then restart the backend</pre>
+              <pre className="mt-2 overflow-x-auto rounded-[2px] bg-bg p-2 text-[13px] text-text">./scripts/fetch_kernels.sh   # then restart the backend</pre>
               <button
                 type="button"
                 onClick={() => setWin((w) => ({ ...w, mode: "synthetic" }))}
-                className="mt-2 rounded border border-sun/50 px-2 py-1 text-[12px] text-sun hover:bg-sun/10"
+                className="mt-2 rounded-[2px] border border-text px-2 py-1 text-[13px] text-text hover:bg-bg"
               >
                 Switch to synthetic demo data (not scientific)
               </button>
             </div>
           )}
           {error && (
-            <div role="alert" className="rounded-md border border-danger/50 bg-danger/10 p-3 text-[13px]">
-              <p className="font-medium text-danger">
+            <div role="alert" className="border border-danger bg-field p-3 text-[13px]">
+              <p className="font-bold text-danger">
                 {error.code === "invalid_request" ? "The request was rejected" : error.code === "spice_unavailable" ? "SPICE unavailable" : "Computation failed"}
               </p>
               <p className="mt-1 text-text">{error.message}</p>
@@ -293,7 +293,7 @@ export default function LunarPrimeApp() {
           )}
 
           <div className="grid grid-cols-1 gap-3 2xl:grid-cols-[minmax(0,1fr)_340px]">
-            <div className="relative h-[420px] overflow-hidden rounded-md border border-line bg-panel sm:h-[520px] 2xl:h-auto 2xl:min-h-[640px]">
+            <div className="relative h-[420px] overflow-hidden sm:h-[520px] 2xl:h-auto 2xl:min-h-[640px]">
               <MoonGlobe sites={globeSites} subsolar={subsolar} subEarth={subEarth} picking={picking} onPick={onPick} view={view} active={tab === "compare"} />
               <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-2 p-2.5">
                 <div className="pointer-events-auto flex gap-1" role="group" aria-label="Globe view">
@@ -302,29 +302,29 @@ export default function LunarPrimeApp() {
                       key={v}
                       type="button"
                       onClick={() => setView((p) => ({ name: v, nonce: p.nonce + 1 }))}
-                      className="rounded border border-line bg-black/60 px-2 py-0.5 text-[11px] capitalize text-muted hover:text-text"
+                      className="rounded-[2px] border border-line bg-black/60 px-2 py-0.5 text-[13px] capitalize text-muted hover:text-text"
                     >
                       {v === "near" || v === "far" ? `${v} side` : `${v} pole`}
                     </button>
                   ))}
                 </div>
                 {picking && (
-                  <span className="rounded border border-accent/60 bg-black/70 px-2 py-0.5 text-[11px] text-accent">
+                  <span className="rounded-[2px] border border-white/60 bg-black/70 px-2 py-0.5 text-[13px] text-text font-bold">
                     Click the surface to place site {picking} · Esc to cancel
                   </span>
                 )}
               </div>
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 p-2.5 text-[11px] leading-snug text-faint">
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 p-2.5 text-[13px] leading-snug text-muted">
                 {result ? (
                   <>
                     Lighting from the computed subsolar point ({subsolar!.lat.toFixed(2)}°, {subsolar!.lon.toFixed(2)}°) at the scrubber time.
                     Sub-Earth point ({subEarth!.lat.toFixed(2)}°, {subEarth!.lon.toFixed(2)}°). Smooth sphere: no terrain shadows.
-                    {stale && <span className="text-sun"> Markers show edited inputs; results are from the previous run.</span>}
+                    {stale && <span className="text-sun-ink"> Markers show edited inputs; results are from the previous run.</span>}
                   </>
                 ) : (
                   "Run a comparison to light the globe from the computed Sun direction."
                 )}
-                <span className="block text-[10px]">Basemap: NASA SVS CGI Moon Kit (LRO LROC WAC mosaic, LOLA elevation), public domain.</span>
+                <span className="block text-[13px]">Basemap: NASA SVS CGI Moon Kit (LRO LROC WAC mosaic, LOLA elevation), public domain.</span>
               </div>
             </div>
 
@@ -332,7 +332,7 @@ export default function LunarPrimeApp() {
               {result
                 ? result.sites.map((s, k) => <HorizonView key={s.id} site={s} letter={LETTERS[k]} index={i} />)
                 : LETTERS.map((l) => (
-                    <div key={l} className="flex h-[330px] items-center justify-center rounded-md border border-line bg-panel text-xs text-faint">
+                    <div key={l} className="flex h-[330px] items-center justify-center text-[13px] text-muted">
                       {loading ? "Computing local horizon…" : `Horizon view for site ${l}`}
                     </div>
                   ))}
@@ -347,9 +347,9 @@ export default function LunarPrimeApp() {
 
           <div className={`space-y-3 transition-opacity ${loading || stale ? "opacity-60" : ""}`}>
             {stale && !loading && (
-              <div className="flex items-center justify-between gap-3 rounded-md border border-sun/40 bg-sun/5 px-3 py-2 text-[12px] text-sun">
+              <div className="flex items-center justify-between gap-3 border border-text bg-field px-3 py-2 text-[13px] text-text">
                 <span>Inputs changed since the last run. Results below are for the previous inputs.</span>
-                <button type="button" onClick={() => request && run(request)} className="shrink-0 rounded border border-sun/50 px-2 py-0.5 hover:bg-sun/10">
+                <button type="button" onClick={() => request && run(request)} className="shrink-0 rounded-[2px] border border-text bg-text px-2 py-0.5 font-bold text-bg hover:opacity-90">
                   Recompute
                 </button>
               </div>
@@ -358,7 +358,7 @@ export default function LunarPrimeApp() {
             <Panel
               title="Visibility timelines"
               aside={
-                <span className="text-[11px] text-faint">
+                <span className="text-[13px] text-muted">
                   Geometric visibility · body centre above ideal horizon (el &gt; 0°) · no terrain · click to set time
                 </span>
               }
@@ -366,14 +366,14 @@ export default function LunarPrimeApp() {
               {result ? (
                 <Timelines result={result} index={i} onSelectTime={onSelectTime} />
               ) : (
-                <div className="flex h-[470px] items-center justify-center text-xs text-faint">
+                <div className="flex h-[470px] items-center justify-center text-[13px] text-muted">
                   {loading ? "Computing geometry with SPICE…" : "No results yet."}
                 </div>
               )}
-              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted">
-                <span className="flex items-center gap-1.5"><span className="h-2 w-3 rounded-sm bg-sun" /> Sun above horizon</span>
-                <span className="flex items-center gap-1.5"><span className="h-2 w-3 rounded-sm bg-earth" /> Earth above horizon</span>
-                <span className="flex items-center gap-1.5"><span className="h-2 w-3 rounded-sm bg-both" /> Both</span>
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-muted">
+                <span className="flex items-center gap-1.5"><span className="h-2 w-3 rounded-[2px] bg-sun" /> Sun above horizon</span>
+                <span className="flex items-center gap-1.5"><span className="h-2 w-3 rounded-[2px] bg-earth" /> Earth above horizon</span>
+                <span className="flex items-center gap-1.5"><span className="h-2 w-3 rounded-[2px] bg-text" /> Both</span>
                 <span className="flex items-center gap-1.5"><span className="h-px w-3 border-t border-dotted border-faint" /> Ideal horizon (0°)</span>
               </div>
             </Panel>
@@ -383,7 +383,7 @@ export default function LunarPrimeApp() {
                 <Panel title="Findings">
                   <Findings result={result} />
                 </Panel>
-                <Panel title="Metrics" aside={<span className="font-mono text-[11px] text-faint">{fmtUtc(result.metadata.window_start_utc).slice(0, 16)} → {fmtUtc(result.metadata.window_end_utc).slice(0, 16)}</span>}>
+                <Panel title="Metrics" aside={<span className="tabular-nums text-[13px] text-muted">{fmtUtc(result.metadata.window_start_utc).slice(0, 16)} → {fmtUtc(result.metadata.window_end_utc).slice(0, 16)}</span>}>
                   <MetricsTable result={result} />
                 </Panel>
               </div>
@@ -393,7 +393,7 @@ export default function LunarPrimeApp() {
               <Panel
                 title="Method, limitations & provenance"
                 aside={
-                  <button type="button" onClick={exportJson} className="rounded border border-line px-2 py-0.5 text-[11px] text-muted hover:text-text">
+                  <button type="button" onClick={exportJson} className="rounded-[2px] border border-line px-2 py-0.5 text-[13px] text-muted hover:text-text">
                     Export JSON
                   </button>
                 }

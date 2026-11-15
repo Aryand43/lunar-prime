@@ -68,13 +68,13 @@ export function windowErrors(w: WindowDraft, maxSamples: number, coverage?: [str
 }
 
 const inputCls =
-  "w-full rounded border border-line bg-panel-2 px-2 py-1.5 font-mono text-[13px] text-text placeholder:text-faint focus:border-accent focus:outline-none aria-[invalid=true]:border-danger";
-const labelCls = "mb-1 block text-[11px] uppercase tracking-wider text-muted";
+  "w-full rounded-[2px] border border-line bg-field px-2 py-1.5 tabular-nums text-[13px] text-text placeholder:text-muted focus:border-text focus:outline-none aria-[invalid=true]:border-danger";
+const labelCls = "mb-1 block text-[13px] text-muted";
 
 function FieldError({ id, msg }: { id: string; msg?: string }) {
   if (!msg) return null;
   return (
-    <p id={id} className="mt-1 text-[11px] text-danger">
+    <p id={id} className="mt-1 text-[13px] text-danger">
       {msg}
     </p>
   );
@@ -95,19 +95,19 @@ export function SiteCard({
   const set = (patch: Partial<SiteDraft>) => onChange({ ...draft, ...patch, presetKey: patch.presetKey ?? "custom" });
 
   return (
-    <fieldset className="rounded-md border border-line bg-panel p-3">
+    <fieldset className="p-3">
       <legend className="sr-only">Site {letter}</legend>
       <div className="mb-2.5 flex items-center justify-between">
-        <span className="flex items-center gap-2 text-sm font-medium">
-          <span className="flex h-5 w-5 items-center justify-center rounded-sm border border-line-strong text-[11px] font-semibold">{letter}</span>
+        <span className="flex items-center gap-2 text-sm font-bold">
+          <span className="flex h-5 w-5 items-center justify-center rounded-[2px] border border-line text-[13px] font-bold">{letter}</span>
           Site {letter}
         </span>
         <button
           type="button"
           onClick={onTogglePick}
           aria-pressed={picking}
-          className={`rounded border px-2 py-0.5 text-[11px] transition-colors ${
-            picking ? "border-accent bg-accent/10 text-accent" : "border-line text-muted hover:border-line-strong hover:text-text"
+          className={`rounded-[2px] border px-2 py-0.5 text-[13px] transition-colors ${
+            picking ? "border-text bg-text text-bg" : "border-line text-muted hover:border-line hover:text-text"
           }`}
         >
           {picking ? "Click the globe…" : "Place on globe"}
@@ -130,7 +130,7 @@ export function SiteCard({
         ))}
         <option value="custom">Custom coordinates</option>
       </select>
-      {preset && <p className="mt-1 text-[11px] leading-snug text-faint">{preset.note}</p>}
+      {preset && <p className="mt-1 text-[13px] leading-snug text-muted">{preset.note}</p>}
 
       <label htmlFor={`${uid}-label`} className={labelCls + " mt-2.5"}>Label</label>
       <input
@@ -188,9 +188,9 @@ export function WindowCard({
   const err = windowErrors(draft, maxSamples, coverage);
   const n = sampleCount(draft);
   return (
-    <fieldset className="rounded-md border border-line bg-panel p-3">
+    <fieldset className="p-3">
       <legend className="sr-only">Simulation window</legend>
-      <div className="mb-2.5 text-sm font-medium">Window</div>
+      <div className="mb-2.5 text-sm font-bold">Window</div>
 
       <label htmlFor={`${uid}-start`} className={labelCls}>Start (UTC)</label>
       <input
@@ -203,7 +203,7 @@ export function WindowCard({
         aria-describedby={`${uid}-start-hint`}
         onChange={(e) => onChange({ ...draft, start: e.target.value })}
       />
-      <p id={`${uid}-start-hint`} className={`mt-1 text-[11px] ${err.start ? "text-danger" : "text-faint"}`}>
+      <p id={`${uid}-start-hint`} className={`mt-1 text-[13px] ${err.start ? "text-danger" : "text-muted"}`}>
         {err.start ?? "Interpreted as UTC, not your local time zone."}
       </p>
 
@@ -223,8 +223,8 @@ export function WindowCard({
             key={label}
             type="button"
             onClick={() => onChange({ ...draft, durationDays: String(d) })}
-            className={`rounded border px-1.5 py-0.5 text-[11px] ${
-              Number(draft.durationDays) === d ? "border-accent text-accent" : "border-line text-muted hover:text-text"
+            className={`rounded-[2px] border px-1.5 py-0.5 text-[13px] ${
+              Number(draft.durationDays) === d ? "border-text bg-text text-bg" : "border-line text-muted hover:text-text"
             }`}
           >
             {label}
@@ -246,13 +246,13 @@ export function WindowCard({
           </option>
         ))}
       </select>
-      <p className={`mt-1 font-mono text-[11px] ${err.samples ? "text-danger" : "text-faint"}`}>
+      <p className={`mt-1 tabular-nums text-[13px] ${err.samples ? "text-danger" : "text-muted"}`}>
         {err.samples ?? (n ? `${n.toLocaleString()} samples / site · limit ${maxSamples.toLocaleString()}` : "—")}
       </p>
 
       <details className="mt-3 border-t border-line pt-2">
-        <summary className="cursor-pointer text-[11px] uppercase tracking-wider text-muted hover:text-text">Data source</summary>
-        <div className="mt-2 space-y-1.5 text-[12px]" role="radiogroup" aria-label="Data source">
+        <summary className="cursor-pointer text-[13px] text-muted hover:text-text">Data source</summary>
+        <div className="mt-2 space-y-1.5 text-[13px]" role="radiogroup" aria-label="Data source">
           {(
             [
               ["spice", "NASA NAIF SPICE (DE440)", "Scientific computation from official kernels."],
@@ -263,13 +263,13 @@ export function WindowCard({
               <input
                 type="radio"
                 name={`${uid}-mode`}
-                className="mt-0.5 accent-[var(--color-accent)]"
+                className="mt-0.5 accent-[var(--color-text)]"
                 checked={draft.mode === m}
                 onChange={() => onChange({ ...draft, mode: m })}
               />
               <span>
-                <span className={m === "synthetic" ? "text-sun" : "text-text"}>{title}</span>
-                <span className="block text-[11px] text-faint">{desc}</span>
+                <span className={m === "synthetic" ? "text-sun-ink" : "text-text"}>{title}</span>
+                <span className="block text-[13px] text-muted">{desc}</span>
               </span>
             </label>
           ))}

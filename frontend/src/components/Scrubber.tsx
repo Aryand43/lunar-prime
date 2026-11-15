@@ -13,8 +13,25 @@ interface Props {
 
 const PLAY_SECONDS = 24; // wall-clock time to play the whole window
 
+/** 12 px playback icons drawn with currentColor. */
+export function Icon({ name }: { name: "play" | "pause" | "prev" | "next" | "back" | "fwd" }) {
+  const p = {
+    play: <path d="M2 1l9 5-9 5z" />,
+    pause: <path d="M2 1h3v10H2zM7 1h3v10H7z" />,
+    prev: <path d="M2 1v10M12 1L5 6l7 5z" stroke="currentColor" strokeWidth={1.6} />,
+    next: <path d="M12 1v10M2 1l7 5-7 5z" stroke="currentColor" strokeWidth={1.6} />,
+    back: <path d="M7 1L2 6l5 5" fill="none" stroke="currentColor" strokeWidth={1.8} />,
+    fwd: <path d="M1 1l5 5-5 5" fill="none" stroke="currentColor" strokeWidth={1.8} />,
+  }[name];
+  return (
+    <svg width={12} height={12} viewBox="0 0 13 12" fill="currentColor" aria-hidden>
+      {p}
+    </svg>
+  );
+}
+
 const btn =
-  "flex h-7 min-w-7 items-center justify-center rounded border border-line px-1.5 text-[12px] text-muted hover:border-line-strong hover:text-text disabled:opacity-40";
+  "flex h-7 min-w-7 items-center justify-center rounded-[2px] border border-line bg-field px-1.5 text-text hover:border-text disabled:opacity-40";
 
 export default function Scrubber({ result, index, onIndex }: Props) {
   const n = result.timestamps_utc.length;
@@ -64,7 +81,7 @@ export default function Scrubber({ result, index, onIndex }: Props) {
   const nextEvent = events.find((e) => e > index);
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-line bg-panel/95 px-3 py-2 backdrop-blur">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-y border-line bg-bg/95 py-2">
       <div className="flex items-center gap-1">
         <button
           type="button"
@@ -75,19 +92,19 @@ export default function Scrubber({ result, index, onIndex }: Props) {
           }}
           aria-label={playing ? "Pause playback" : "Play through the window"}
         >
-          {playing ? "❚❚" : "▶"}
+          <Icon name={playing ? "pause" : "play"} />
         </button>
         <button type="button" className={btn} disabled={prevEvent === undefined} onClick={() => prevEvent !== undefined && onIndex(prevEvent)} aria-label="Jump to previous rise or set event" title="Previous rise/set event">
-          ⇤
+          <Icon name="prev" />
         </button>
         <button type="button" className={btn} disabled={index <= 0} onClick={() => onIndex(Math.max(0, index - 1))} aria-label="Previous sample">
-          ‹
+          <Icon name="back" />
         </button>
         <button type="button" className={btn} disabled={index >= n - 1} onClick={() => onIndex(Math.min(n - 1, index + 1))} aria-label="Next sample">
-          ›
+          <Icon name="fwd" />
         </button>
         <button type="button" className={btn} disabled={nextEvent === undefined} onClick={() => nextEvent !== undefined && onIndex(nextEvent)} aria-label="Jump to next rise or set event" title="Next rise/set event">
-          ⇥
+          <Icon name="next" />
         </button>
       </div>
       <input
@@ -104,9 +121,9 @@ export default function Scrubber({ result, index, onIndex }: Props) {
         aria-label="Simulation time"
         aria-valuetext={fmtUtc(result.timestamps_utc[index])}
       />
-      <div className="flex items-baseline gap-2 font-mono text-[12px] tabular-nums">
+      <div className="flex items-baseline gap-2 tabular-nums text-[12px] tabular-nums">
         <span className="text-text">{fmtUtc(result.timestamps_utc[index])}</span>
-        <span className="text-faint">T+{fmtDuration(result.elapsed_s[index])}</span>
+        <span className="text-muted">T+{fmtDuration(result.elapsed_s[index])}</span>
       </div>
     </div>
   );

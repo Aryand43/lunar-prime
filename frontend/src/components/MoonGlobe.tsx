@@ -70,7 +70,7 @@ const GLYPH_R = 1.28;
 const MARKER_COLOR: Record<MarkerKind, string> = {
   site: "#ffffff",
   start: "#ffffff",
-  visited: "#5ec4b6",
+  visited: "#FFFFFF",
   candidate: "#8b919b",
   destination: "#f07167",
 };
@@ -300,19 +300,19 @@ export default function MoonGlobe({
             style={{ opacity: 0 }}
           >
             {a.kind === "sun" || a.kind === "earth" ? (
-              <div className="ml-2 -translate-y-1/2 whitespace-nowrap text-[10px] uppercase tracking-wider" style={{ color: a.kind === "sun" ? "#f2b84b" : "#6b9cff" }}>
+              <div className="ml-2 -translate-y-1/2 whitespace-nowrap text-[13px] " style={{ color: a.kind === "sun" ? "#f2b84b" : "#6b9cff" }}>
                 {a.text}
               </div>
             ) : a.kind === "rover" ? (
-              <div className="ml-2 -translate-y-1/2 whitespace-nowrap text-[10px] uppercase tracking-wider text-sun">{a.text}</div>
+              <div className="ml-2 -translate-y-1/2 whitespace-nowrap text-[13px] text-sun-ink">{a.text}</div>
             ) : (
               <div
-                className={`ml-2 -translate-y-1/2 whitespace-nowrap rounded border bg-black/70 px-1.5 py-0.5 leading-tight ${
-                  compact ? "text-[10px]" : "text-[11px]"
-                } ${a.kind === "candidate" ? "border-white/10 text-faint" : a.kind === "destination" ? "border-danger/50 text-text" : a.kind === "visited" ? "border-accent/50 text-text" : "border-white/15 text-text"}`}
+                className={`ml-2 -translate-y-1/2 whitespace-nowrap rounded-[2px] border bg-black/70 px-1.5 py-0.5 leading-tight ${
+                  compact ? "text-[13px]" : "text-[13px]"
+                } ${a.kind === "candidate" ? "border-white/10 text-muted" : a.kind === "destination" ? "border-danger text-text" : a.kind === "visited" ? "border-text text-text" : "border-white/15 text-text"}`}
               >
-                <span className="mr-1 font-semibold">{a.letter}</span>
-                <span className={a.kind === "candidate" ? "text-faint" : "text-muted"}>{a.text}</span>
+                <span className="mr-1 font-bold">{a.letter}</span>
+                <span className={a.kind === "candidate" ? "text-muted" : "text-muted"}>{a.text}</span>
               </div>
             )}
           </div>

@@ -11,11 +11,12 @@ import type { RouteRequest, RouteResponse } from "@/lib/routeTypes";
 import type { HealthResponse } from "@/lib/types";
 import type { GlobePath, GlobeSite, GlobeView } from "./MoonGlobe";
 import { EndpointCard, ObjectiveCard, ScheduleCard, WaypointList, idErr, latErr, lonErr, paramErrors } from "./RouteControls";
+import { Icon } from "./Scrubber";
 import { ComparisonTable, Itinerary, LegTable, RouteMethod, RouteSummary, TrajectoryChart } from "./RouteResults";
 
 const MoonGlobe = dynamic(() => import("./MoonGlobe"), {
   ssr: false,
-  loading: () => <div className="flex h-full items-center justify-center text-xs text-muted">Loading 3D globe…</div>,
+  loading: () => <div className="flex h-full items-center justify-center text-[13px] text-muted">Loading 3D globe…</div>,
 });
 
 const DISCLAIMER =
@@ -46,12 +47,12 @@ function buildRequest(start: BaseDraft, dest: BaseDraft, wps: BaseDraft[], p: Pl
 
 function Panel({ title, aside, children }: { title: string; aside?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <section className="rounded-md border border-line bg-panel" aria-label={title}>
-      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-2.5">
-        <h2 className="text-[13px] font-medium">{title}</h2>
+    <section className="" aria-label={title}>
+      <header className="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <h2 className="text-[18px] leading-[24px] font-bold">{title}</h2>
         {aside}
       </header>
-      <div className="p-4">{children}</div>
+      <div className="p-0">{children}</div>
     </section>
   );
 }
@@ -108,25 +109,25 @@ function RouteScrubber({ res, index, onIndex }: { res: RouteResponse; index: num
   const seg = res.route!.segments[tr.segment_index[index]];
   const prev = [...bounds].reverse().find((b) => b < index);
   const next = bounds.find((b) => b > index);
-  const btn = "flex h-7 min-w-7 items-center justify-center rounded border border-line px-1.5 text-[12px] text-muted hover:text-text disabled:opacity-40";
+  const btn = "flex h-7 min-w-7 items-center justify-center rounded-[2px] border border-line bg-field px-1.5 text-text hover:border-text disabled:opacity-40";
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-line bg-panel/95 px-3 py-2 backdrop-blur">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-y border-line bg-bg/95 py-2">
       <div className="flex items-center gap-1">
         <button type="button" className={btn} onClick={() => { if (!playing && index >= n - 1) onIndex(0); setPlaying((p) => !p); }} aria-label={playing ? "Pause route playback" : "Play route"}>
-          {playing ? "❚❚" : "▶"}
+          <Icon name={playing ? "pause" : "play"} />
         </button>
-        <button type="button" className={btn} disabled={prev === undefined} onClick={() => prev !== undefined && onIndex(prev)} aria-label="Previous segment">⇤</button>
-        <button type="button" className={btn} disabled={next === undefined} onClick={() => next !== undefined && onIndex(next)} aria-label="Next segment">⇥</button>
+        <button type="button" className={btn} disabled={prev === undefined} onClick={() => prev !== undefined && onIndex(prev)} aria-label="Previous segment"><Icon name="prev" /></button>
+        <button type="button" className={btn} disabled={next === undefined} onClick={() => next !== undefined && onIndex(next)} aria-label="Next segment"><Icon name="next" /></button>
       </div>
       <input type="range" min={0} max={n - 1} value={index} onChange={(e) => { setPlaying(false); onIndex(Number(e.target.value)); }} className="min-w-[140px] flex-1" aria-label="Route time" aria-valuetext={fmtUtc(tr.time_utc[index])} />
-      <div className="flex flex-wrap items-baseline gap-x-2 font-mono text-[12px] tabular-nums">
+      <div className="flex flex-wrap items-baseline gap-x-2 text-[13px] tabular-nums">
         <span className="text-text">{fmtUtc(tr.time_utc[index])}</span>
-        <span className="text-faint">T+{fmtDuration(tr.elapsed_s[index])}</span>
-        <span className={tr.status[index] === "move" ? "text-accent" : "text-muted"}>
+        <span className="text-muted">T+{fmtDuration(tr.elapsed_s[index])}</span>
+        <span className={tr.status[index] === "move" ? "text-text font-bold" : "text-muted"}>
           {seg ? (seg.kind === "move" ? `moving ${seg.base_id}→${seg.to_id}` : `waiting at ${seg.base_id}`) : ""}
         </span>
-        <span className={tr.sun_el_deg[index] > 0 ? "text-sun" : "text-faint"}>☉ {tr.sun_el_deg[index].toFixed(2)}°</span>
-        <span className={tr.earth_el_deg[index] > 0 ? "text-earth" : "text-faint"}>⊕ {tr.earth_el_deg[index].toFixed(2)}°</span>
+        <span className={tr.sun_el_deg[index] > 0 ? "text-sun-ink" : "text-muted"}>☉ {tr.sun_el_deg[index].toFixed(2)}°</span>
+        <span className={tr.earth_el_deg[index] > 0 ? "text-earth-ink" : "text-muted"}>⊕ {tr.earth_el_deg[index].toFixed(2)}°</span>
       </div>
     </div>
   );
@@ -266,7 +267,7 @@ export default function RoutePlanner({ active }: { active: boolean }) {
       });
     }
     if (showBaseline && res.baseline.plan) out.push({ key: "baseline", points: arcs(res.baseline.plan.visited, 1.0018), color: "#d4d7dc", dashed: true, opacity: 0.85 });
-    if (res.route) out.push({ key: "route", points: arcs(res.route.visited, 1.0024), color: "#5ec4b6" });
+    if (res.route) out.push({ key: "route", points: arcs(res.route.visited, 1.0024), color: "#FFFFFF" });
     return out;
   }, [res, basePos, showBaseline, showNetwork]);
 
@@ -279,63 +280,63 @@ export default function RoutePlanner({ active }: { active: boolean }) {
 
   return (
     <div className="grid flex-1 grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)]">
-      <aside className="space-y-3 border-b border-line p-3 lg:sticky lg:top-12 lg:h-[calc(100vh-3rem)] lg:overflow-y-auto lg:border-r lg:border-b-0">
+      <aside className="space-y-8 border-b border-line p-3 lg:sticky lg:top-12 lg:h-[calc(100vh-3rem)] lg:overflow-y-auto lg:border-r lg:border-b-0">
         <EndpointCard title="Start" draft={start} onChange={setStart} picking={picking === "start"} onTogglePick={() => setPicking((x) => (x === "start" ? null : "start"))} />
         <EndpointCard title="Destination" draft={dest} onChange={(d) => { setDest(d); setCustomDest(true); }} picking={picking === "dest"} onTogglePick={() => setPicking((x) => (x === "dest" ? null : "dest"))}>
           {customDest ? (
-            <button type="button" onClick={() => { setDest(SOUTH_POLE); setCustomDest(false); }} className="rounded border border-line px-1.5 py-0.5 text-[10px] text-muted hover:text-text">
+            <button type="button" onClick={() => { setDest(SOUTH_POLE); setCustomDest(false); }} className="rounded-[2px] border border-line px-1.5 py-0.5 text-[13px] text-muted hover:text-text">
               Reset to south pole
             </button>
           ) : (
-            <span className="text-[10px] text-faint">default: −90°, 0°</span>
+            <span className="text-[13px] text-muted">default: −90°, 0°</span>
           )}
         </EndpointCard>
         <WaypointList items={wps} onChange={setWps} picking={picking} onTogglePick={(uid) => setPicking((x) => (x === uid ? null : uid))} onReset={() => setWps(DEMO_WAYPOINTS)} />
         <ScheduleCard p={p} onChange={setP} />
         <ObjectiveCard p={p} onChange={setP} />
-        <div className="sticky bottom-0 -mx-3 -mb-3 space-y-2 border-t border-line bg-bg/95 p-3 backdrop-blur">
+        <div className="sticky bottom-0 -mx-3 -mb-3 space-y-2 border-t border-line bg-bg/95 p-3 ">
           <button
             type="button"
             disabled={!request || loading}
             onClick={() => request && run(request)}
-            className="w-full rounded-md bg-accent px-3 py-2 text-sm font-medium text-black hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+            className="w-full rounded-[2px] bg-text px-3 py-2 text-[15px] font-bold text-bg hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {loading ? "Optimizing…" : "Optimize route"}
           </button>
-          {invalid && <p className="text-[11px] text-danger">Fix the highlighted fields to optimize.</p>}
+          {invalid && <p className="text-[13px] text-danger">Fix the highlighted fields to optimize.</p>}
         </div>
       </aside>
 
-      <main className="min-w-0 space-y-3 p-3">
-        <div role="note" className="rounded-md border border-sun/50 bg-sun/[0.07] px-3 py-2 text-[13px] font-medium text-sun">
+      <main className="min-w-0 space-y-10 p-6">
+        <div role="note" className="border border-text bg-field px-3 py-2 text-[14px] text-text">
           {DISCLAIMER}
-          <span className="block text-[11px] font-normal text-muted">
+          <span className="block text-[13px] font-normal text-muted">
             Waypoints are hypothetical. Sunlight ≠ power, Earth visibility ≠ communication. Not a certified or globally optimal route.
           </span>
         </div>
         {synthetic && (
-          <div role="alert" className="rounded-md border border-sun/60 bg-sun/10 px-3 py-1.5 text-[12px] text-sun">
+          <div role="alert" className="border border-text bg-field px-3 py-1.5 text-[13px] text-text">
             Synthetic demo mode: Sun/Earth positions come from a crude analytic model. Not SPICE results and not NASA data.
           </div>
         )}
         {healthError && (
-          <div role="alert" className="rounded-md border border-danger/50 bg-danger/10 p-3 text-[13px]">
-            <p className="font-medium text-danger">Backend unreachable</p>
+          <div role="alert" className="border border-danger bg-field p-3 text-[13px]">
+            <p className="font-bold text-danger">Backend unreachable</p>
             <p className="mt-1">{healthError}</p>
           </div>
         )}
         {health && !health.spice_available && p.mode === "spice" && (
-          <div role="alert" className="rounded-md border border-sun/50 bg-sun/5 p-3 text-[13px]">
-            <p className="font-medium text-sun">SPICE kernels unavailable: the planner will not fall back to synthetic data on its own.</p>
+          <div role="alert" className="border border-text bg-field p-3 text-[13px]">
+            <p className="font-bold text-sun-ink">SPICE kernels unavailable: the planner will not fall back to synthetic data on its own.</p>
             <p className="mt-1">{health.error}</p>
-            <button type="button" onClick={() => setP((x) => ({ ...x, mode: "synthetic" }))} className="mt-2 rounded border border-sun/50 px-2 py-1 text-[12px] text-sun hover:bg-sun/10">
+            <button type="button" onClick={() => setP((x) => ({ ...x, mode: "synthetic" }))} className="mt-2 rounded-[2px] border border-text px-2 py-1 text-[13px] text-text hover:bg-bg">
               Use synthetic demo data (not scientific)
             </button>
           </div>
         )}
         {error && (
-          <div role="alert" className="rounded-md border border-danger/50 bg-danger/10 p-3 text-[13px]">
-            <p className="font-medium text-danger">
+          <div role="alert" className="border border-danger bg-field p-3 text-[13px]">
+            <p className="font-bold text-danger">
               {error.code === "invalid_request" ? "The request was rejected" : error.code === "spice_unavailable" ? "SPICE unavailable" : "Optimization failed"}
             </p>
             <p className="mt-1 text-text">{error.message}</p>
@@ -343,7 +344,7 @@ export default function RoutePlanner({ active }: { active: boolean }) {
         )}
 
         <div className="grid grid-cols-1 gap-3 2xl:grid-cols-[minmax(0,1fr)_380px]">
-          <div className="relative h-[440px] overflow-hidden rounded-md border border-line bg-panel sm:h-[560px]">
+          <div className="relative h-[440px] overflow-hidden sm:h-[560px]">
             <MoonGlobe
               sites={markers}
               subsolar={subsolar}
@@ -365,40 +366,40 @@ export default function RoutePlanner({ active }: { active: boolean }) {
                     ["south", "South hemisphere"],
                   ] as [GlobeView, string][]
                 ).map(([v, label]) => (
-                  <button key={v} type="button" onClick={() => setView((x) => ({ name: v, nonce: x.nonce + 1 }))} className="rounded border border-line bg-black/60 px-2 py-0.5 text-[11px] text-muted hover:text-text">
+                  <button key={v} type="button" onClick={() => setView((x) => ({ name: v, nonce: x.nonce + 1 }))} className="rounded-[2px] border border-line bg-black/60 px-2 py-0.5 text-[13px] text-muted hover:text-text">
                     {label}
                   </button>
                 ))}
-                <label className="flex items-center gap-1 rounded border border-line bg-black/60 px-2 py-0.5 text-[11px] text-muted">
-                  <input type="checkbox" checked={showBaseline} onChange={(e) => setShowBaseline(e.target.checked)} className="accent-[var(--color-accent)]" />
+                <label className="flex items-center gap-1 rounded-[2px] border border-line bg-black/60 px-2 py-0.5 text-[13px] text-muted">
+                  <input type="checkbox" checked={showBaseline} onChange={(e) => setShowBaseline(e.target.checked)} className="accent-[var(--color-text)]" />
                   Baseline (dashed)
                 </label>
-                <label className="flex items-center gap-1 rounded border border-line bg-black/60 px-2 py-0.5 text-[11px] text-muted">
-                  <input type="checkbox" checked={showNetwork} onChange={(e) => setShowNetwork(e.target.checked)} className="accent-[var(--color-accent)]" />
+                <label className="flex items-center gap-1 rounded-[2px] border border-line bg-black/60 px-2 py-0.5 text-[13px] text-muted">
+                  <input type="checkbox" checked={showNetwork} onChange={(e) => setShowNetwork(e.target.checked)} className="accent-[var(--color-text)]" />
                   Candidate legs
                 </label>
               </div>
               {picking && (
-                <span className="rounded border border-accent/60 bg-black/70 px-2 py-0.5 text-[11px] text-accent">Click the surface to place · Esc to cancel</span>
+                <span className="rounded-[2px] border border-white/60 bg-black/70 px-2 py-0.5 text-[13px] text-text font-bold">Click the surface to place · Esc to cancel</span>
               )}
             </div>
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 space-y-0.5 p-2.5 text-[10.5px] leading-snug text-faint">
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 space-y-0.5 p-2.5 text-[13px] leading-snug text-muted">
               <div className="flex flex-wrap gap-x-3">
-                <span><span className="text-accent">━</span> optimized</span>
-                <span><span className="text-both">╍</span> shortest-distance baseline</span>
+                <span><span className="text-text font-bold">━</span> optimized</span>
+                <span><span className="text-text">╍</span> shortest-distance baseline</span>
                 <span><span className="text-muted">─</span> candidate legs ≤ max leg</span>
-                <span><span className="text-sun">●</span> traverse position</span>
+                <span><span className="text-sun-ink">●</span> traverse position</span>
                 <span><span className="text-danger">◎</span> destination</span>
               </div>
               <div>
                 Globe shading is illustrative (lit from the computed subsolar point, with extra ambient light); use the elevation values for analysis.
-                {stale && <span className="text-sun"> Inputs changed: paths show the previous result.</span>}
+                {stale && <span className="text-sun-ink"> Inputs changed: paths show the previous result.</span>}
               </div>
             </div>
           </div>
 
-          <Panel title="Optimized route" aside={res && <span className="font-mono text-[10px] text-faint">{res.search.compute_time_ms.toFixed(0)} ms</span>}>
-            {res ? <RouteSummary res={res} /> : <p className="text-xs text-faint">{loading ? "Optimizing with SPICE geometry…" : "Run the optimizer to see a route."}</p>}
+          <Panel title="Optimized route" aside={res && <span className="tabular-nums text-[13px] text-muted">{res.search.compute_time_ms.toFixed(0)} ms</span>}>
+            {res ? <RouteSummary res={res} /> : <p className="text-[13px] text-muted">{loading ? "Optimizing with SPICE geometry…" : "Run the optimizer to see a route."}</p>}
           </Panel>
         </div>
 
@@ -410,15 +411,15 @@ export default function RoutePlanner({ active }: { active: boolean }) {
 
         <div className={`space-y-3 transition-opacity ${loading || stale ? "opacity-60" : ""}`}>
           {stale && !loading && (
-            <div className="flex items-center justify-between gap-3 rounded-md border border-sun/40 bg-sun/5 px-3 py-2 text-[12px] text-sun">
+            <div className="flex items-center justify-between gap-3 border border-text bg-field px-3 py-2 text-[13px] text-text">
               <span>Inputs changed since the last optimization. Results below are for the previous inputs.</span>
-              <button type="button" onClick={() => request && run(request)} className="shrink-0 rounded border border-sun/50 px-2 py-0.5 hover:bg-sun/10">
+              <button type="button" onClick={() => request && run(request)} className="shrink-0 rounded-[2px] border border-text bg-text px-2 py-0.5 font-bold text-bg hover:opacity-90">
                 Re-optimize
               </button>
             </div>
           )}
           {res?.route?.trajectory && (
-            <Panel title="Sun and Earth elevation along the moving trajectory" aside={<span className="text-[11px] text-faint">shaded = waiting · dotted = ideal horizon · click to set time</span>}>
+            <Panel title="Sun and Earth elevation along the moving trajectory" aside={<span className="text-[13px] text-muted">shaded = waiting · dotted = ideal horizon · click to set time</span>}>
               <TrajectoryChart plan={res.route} index={i} onSelectTime={onSelectTime} />
             </Panel>
           )}
