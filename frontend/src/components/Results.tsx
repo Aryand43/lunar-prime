@@ -1,7 +1,8 @@
 "use client";
 
+import { EXPLAIN } from "@/lib/explain";
 import { fmtDeg, fmtDuration, fmtPct, fmtUtc } from "@/lib/format";
-import type { CompareResponse, GapOut, Statement } from "@/lib/types";
+import type { CompareResponse, GapOut, IntervalOut, Statement } from "@/lib/types";
 
 function gapText(g: GapOut | null, visibleFraction: number) {
   if (g === null) return { main: "none", sub: "visible throughout" };
@@ -17,6 +18,8 @@ type Metrics = CompareResponse["sites"][number]["metrics"];
 type Row = {
   label: string;
   hint?: string;
+  /** Plain-language sentence shown when "Explain" is on. */
+  explain?: string;
   value: (m: Metrics) => { main: string; sub?: string };
   /** Fraction (0..1) drawn as a bar under the value, and the bar's fill class. */
   bar?: { value: (m: Metrics) => number; fill: string };
@@ -27,34 +30,40 @@ type Row = {
 const rows: Row[] = [
   {
     label: "Sunlight",
+    explain: EXPLAIN.sunlight,
     value: (m) => ({ main: fmtPct(m.sun.visible_fraction), sub: fmtDuration(m.sun.visible_duration_s) }),
     bar: { value: (m) => m.sun.visible_fraction, fill: "bg-sun" },
     statement: "sun_duration",
   },
   {
     label: "Earth in view",
+    explain: EXPLAIN.earth,
     value: (m) => ({ main: fmtPct(m.earth.visible_fraction), sub: fmtDuration(m.earth.visible_duration_s) }),
     bar: { value: (m) => m.earth.visible_fraction, fill: "bg-earth" },
     statement: "earth_duration",
   },
   {
     label: "Sun and Earth together",
+    explain: EXPLAIN.both,
     value: (m) => ({ main: fmtPct(m.both_fraction), sub: fmtDuration(m.both_duration_s) }),
     bar: { value: (m) => m.both_fraction, fill: "bg-text" },
     statement: "both_duration",
   },
   {
     label: "Longest night",
+    explain: EXPLAIN.night,
     value: (m) => gapText(m.sun.longest_gap, m.sun.visible_fraction),
     statement: "sun_gap",
   },
   {
     label: "Longest Earth outage",
+    explain: EXPLAIN.earthOutage,
     value: (m) => gapText(m.earth.longest_gap, m.earth.visible_fraction),
     statement: "earth_gap",
   },
   {
     label: "Sun elevation range",
+    explain: EXPLAIN.sunElevation,
     value: (m) => ({ main: `${fmtDeg(m.sun.el_min_deg, 1)} … ${fmtDeg(m.sun.el_max_deg, 1)}` }),
   },
   {
@@ -63,6 +72,7 @@ const rows: Row[] = [
   },
   {
     label: "Time within 1° of the horizon",
+    explain: EXPLAIN.nearHorizon,
     hint: "Approximate. High values mean terrain could change the result.",
     value: (m) => ({ main: `Sun ${fmtPct(m.sun.near_horizon_fraction)}`, sub: `Earth ${fmtPct(m.earth.near_horizon_fraction)}` }),
   },
@@ -77,7 +87,7 @@ function FavMark() {
   );
 }
 
-export function MetricsTable({ result }: { result: CompareResponse }) {
+export function MetricsTable({ result, explain = false }: { result: CompareResponse; explain?: boolean }) {
   const [a, b] = result.sites;
   const favors = new Map(result.comparison.statements.map((s) => [s.id, s.favors]));
   return (
@@ -98,7 +108,8 @@ export function MetricsTable({ result }: { result: CompareResponse }) {
               <tr key={r.label} className="border-b border-line align-top">
                 <th scope="row" className="py-3 pr-3 text-left font-normal text-text">
                   {r.label}
-                  {r.hint && <div className="mt-0.5 text-[13px] leading-[18px] text-muted">{r.hint}</div>}
+                  {explain && r.explain && <div className="mt-1 max-w-[240px] text-[13px] leading-[18px] text-muted">{r.explain}</div>}
+                  {r.hint && <div className="mt-1 max-w-[240px] text-[13px] leading-[18px] text-muted">{r.hint}</div>}
                 </th>
                 {[a, b].map((s) => {
                   const v = r.value(s.metrics);
@@ -250,5 +261,69 @@ export function MethodsPanel({ result }: { result: CompareResponse }) {
         </div>
       </div>
     </div>
+  );
+}
+
+const MAX_WINDOW_ROWS = 50;
+
+function WindowTable({ title, ink, intervals }: { title: string; ink: string; intervals: IntervalOut[] }) {
+  const rows = intervals.slice(0, MAX_WINDOW_ROWS);
+  const more = intervals.length - rows.length;
+  return (
+    <div className="min-w-0">
+      <h4 className="mb-1.5 text-[14px] font-bold" style={{ color: ink }}>
+        {title} <span className="font-normal text-muted">({intervals.length} {intervals.length === 1 ? "window" : "windows"})</span>
+      </h4>
+      {intervals.length === 0 ? (
+        <p className="text-[13px] text-muted">None in this window.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-[13px] leading-[18px] tabular-nums">
+            <thead>
+              <tr className="border-b border-line text-left text-muted">
+                <th scope="col" className="py-1.5 pr-3 font-normal">Start (UTC)</th>
+                <th scope="col" className="py-1.5 pr-3 font-normal">End (UTC)</th>
+                <th scope="col" className="py-1.5 pr-3 text-right font-normal">Duration</th>
+                <th scope="col" className="py-1.5 font-normal"><span className="sr-only">Note</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((iv) => (
+                <tr key={iv.start_utc} className="border-b border-line">
+                  <td className="py-1.5 pr-3 whitespace-nowrap">{fmtUtc(iv.start_utc).slice(0, 16)}</td>
+                  <td className="py-1.5 pr-3 whitespace-nowrap">{fmtUtc(iv.end_utc).slice(0, 16)}</td>
+                  <td className="py-1.5 pr-3 text-right whitespace-nowrap">{fmtDuration(iv.duration_s)}</td>
+                  <td className="py-1.5 text-muted">{iv.starts_at_window_start || iv.ends_at_window_end ? "continues beyond the window" : ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {more > 0 && <p className="mt-1.5 text-[13px] text-muted">and {more} more (see Export JSON)</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Every sunlight and Earth-contact window for both sites, as tables. Matches the bars in the timeline. */
+export function WindowsList({ result }: { result: CompareResponse }) {
+  return (
+    <details className="group border-t border-line pt-4">
+      <summary className="cursor-pointer text-[15px] font-bold">Sunlight and Earth-contact windows</summary>
+      <div className="mt-4 space-y-8">
+        {result.sites.map((s, k) => (
+          <div key={s.id}>
+            <h3 className="mb-3 flex items-center gap-2.5 text-[15px] font-bold">
+              <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-text text-[13px] text-bg">{k === 0 ? "A" : "B"}</span>
+              {s.label}
+            </h3>
+            <div className="grid grid-cols-1 gap-8 xl:grid-cols-2">
+              <WindowTable title="Sun up" ink="var(--color-sun-ink)" intervals={s.intervals.sun} />
+              <WindowTable title="Earth in view" ink="var(--color-earth-ink)" intervals={s.intervals.earth} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </details>
   );
 }

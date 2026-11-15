@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 
 import { nextChange, type NextChange } from "@/lib/events";
+import { EXPLAIN } from "@/lib/explain";
 import { compass, fmtDuration, fmtLat, fmtLon, fmtUtc } from "@/lib/format";
 import { EARTH, EARTH_INK, FIELD, INK, LINE, MUTED, NIGHT, SUN, SUN_INK } from "@/lib/theme";
 import type { SiteResult } from "@/lib/types";
@@ -25,6 +26,8 @@ interface Props {
   /** Time of the current sample for this site, and the end of this site's window (both UTC). */
   timeUtc: string;
   windowEndUtc: string;
+  /** Show the plain-language sentence under the elevation figures. */
+  explain?: boolean;
 }
 
 function stride(n: number) {
@@ -130,7 +133,7 @@ function Readout({ name, fill, ink, az, el }: { name: string; fill: string; ink:
   );
 }
 
-export default function HorizonView({ site, letter, index, timeUtc, windowEndUtc }: Props) {
+export default function HorizonView({ site, letter, index, timeUtc, windowEndUtc, explain = false }: Props) {
   const i = Math.min(index, site.sun.az_deg.length - 1);
   const sun = { az: site.sun.az_deg[i], el: site.sun.el_deg[i] };
   const earth = { az: site.earth.az_deg[i], el: site.earth.el_deg[i] };
@@ -193,6 +196,7 @@ export default function HorizonView({ site, letter, index, timeUtc, windowEndUtc
         <div className="space-y-0.5">
           <BigElevation name="Sun" ink={SUN_INK} el={sun.el} />
           <BigElevation name="Earth" ink={EARTH_INK} el={earth.el} />
+          {explain && <p className="max-w-[260px] pt-1 text-[13px] leading-[18px] text-muted">{EXPLAIN.sunElevation}</p>}
         </div>
         <svg
           width={S}

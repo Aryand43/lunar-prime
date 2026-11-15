@@ -9,7 +9,8 @@ import type { CompareRequest, CompareResponse, HealthResponse } from "@/lib/type
 import { SiteCard, WindowCard, siteErrors, windowErrors, type SiteDraft, type WindowDraft } from "./Controls";
 import HorizonView from "./HorizonView";
 import type { GlobeView } from "./MoonGlobe";
-import { Findings, Headline, MethodsPanel, MetricsTable } from "./Results";
+import { WHY_THIS_MATTERS } from "@/lib/explain";
+import { Findings, Headline, MethodsPanel, MetricsTable, WindowsList } from "./Results";
 import RoutePlanner from "./RoutePlanner";
 import Scrubber from "./Scrubber";
 import Timelines from "./Timelines";
@@ -79,6 +80,7 @@ export default function LunarPrimeApp() {
   const [view, setView] = useState<{ name: GlobeView; nonce: number }>({ name: "near", nonce: 0 });
   const [tab, setTab] = useState<"compare" | "route">("compare");
   const [routeMounted, setRouteMounted] = useState(false);
+  const [explain, setExplain] = useState(true);
   const abortRef = useRef<AbortController | null>(null);
   const autoRan = useRef(false);
 
@@ -200,6 +202,19 @@ export default function LunarPrimeApp() {
           </div>
         </div>
         <div className={`flex items-center gap-3 ${tab === "compare" ? "" : "hidden"}`}>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={explain}
+            onClick={() => setExplain((e) => !e)}
+            className="flex items-center gap-2 rounded-[2px] px-1 py-1 text-[14px] text-text"
+            title="Show a plain-language sentence under each number"
+          >
+            <span className={`relative h-[18px] w-[32px] rounded-full border ${explain ? "border-text bg-text" : "border-line bg-field"}`} aria-hidden>
+              <span className={`absolute top-[2px] h-[12px] w-[12px] rounded-full transition-all ${explain ? "left-[16px] bg-bg" : "left-[2px] bg-muted"}`} />
+            </span>
+            Explain
+          </button>
           {result && (
             <span
               className={`rounded-[2px] border px-2 py-0.5 text-[13px] ${synthetic ? "border-text font-bold text-text" : "border-line bg-field text-text"}`}
@@ -292,12 +307,19 @@ export default function LunarPrimeApp() {
             </div>
           )}
 
+          {result && explain && (
+            <section aria-label="Why this matters" className="max-w-[820px]">
+              <h2 className="mb-1.5 text-[18px] leading-[24px] font-bold">Why this matters</h2>
+              <p className="text-[15px] leading-[23px] text-text">{WHY_THIS_MATTERS}</p>
+            </section>
+          )}
+
           {result && (
             <section aria-label="Findings and metrics" className={`space-y-8 border-b border-line pb-10 transition-opacity ${loading || stale ? "opacity-60" : ""}`}>
               <Headline result={result} />
               <div className="grid grid-cols-1 gap-12 xl:grid-cols-[minmax(0,1fr)_560px]">
                 <Findings result={result} />
-                <MetricsTable result={result} />
+                <MetricsTable result={result} explain={explain} />
               </div>
             </section>
           )}
@@ -349,6 +371,7 @@ export default function LunarPrimeApp() {
                       index={i}
                       timeUtc={result.timestamps_utc[i]}
                       windowEndUtc={result.metadata.window_end_utc}
+                      explain={explain}
                     />
                   ))
                 : LETTERS.map((l) => (
@@ -381,6 +404,11 @@ export default function LunarPrimeApp() {
                 <span className="flex items-center gap-1.5"><span className="h-2.5 w-4 bg-night" /> Not visible</span>
                 <span className="flex items-center gap-1.5"><span className="h-px w-4 border-t border-dashed border-muted" /> Ideal horizon (0°)</span>
               </div>
+              {result && (
+                <div className="mt-6">
+                  <WindowsList result={result} />
+                </div>
+              )}
             </Panel>
 
             {result && (
