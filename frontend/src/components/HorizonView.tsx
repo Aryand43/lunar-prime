@@ -191,6 +191,7 @@ export default function HorizonView({ site, letter, index, timeUtc, windowEndUtc
         <p className="mt-1 text-[13px] tabular-nums text-muted">
           {fmtLat(site.lat_deg)} {fmtLon(site.lon_deg)}
         </p>
+        {Math.abs(site.lat_deg) >= 80 && <p className="text-[13px] text-muted">Smooth-sphere model. Real terrain is not included.</p>}
       </header>
       <div className="flex flex-col items-start gap-3">
         <div className="space-y-0.5">

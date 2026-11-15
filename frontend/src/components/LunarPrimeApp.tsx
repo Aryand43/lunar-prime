@@ -313,13 +313,6 @@ export default function LunarPrimeApp() {
             </div>
           )}
 
-          {result && explain && (
-            <section aria-label="Why this matters" className="max-w-[820px]">
-              <h2 className="mb-1.5 text-[18px] leading-[24px] font-bold">Why this matters</h2>
-              <p className="text-[15px] leading-[23px] text-text">{WHY_THIS_MATTERS}</p>
-            </section>
-          )}
-
           {result && (
             <section aria-label="Findings and metrics" className={`space-y-8 border-b border-line pb-10 transition-opacity ${loading || stale ? "opacity-60" : ""}`}>
               <Headline result={result} />
@@ -327,6 +320,13 @@ export default function LunarPrimeApp() {
                 <Findings result={result} />
                 <MetricsTable result={result} explain={explain} />
               </div>
+            </section>
+          )}
+
+          {result && explain && (
+            <section aria-label="Why this matters" className="border-b border-line pb-10">
+              <h2 className="mb-1.5 text-[18px] leading-[24px] font-bold">Why this matters</h2>
+              <p className="max-w-[820px] text-[15px] leading-[23px] text-text">{WHY_THIS_MATTERS}</p>
             </section>
           )}
 

@@ -1,5 +1,7 @@
 "use client";
 
+import { Fragment } from "react";
+
 import { EXPLAIN } from "@/lib/explain";
 import { fmtDeg, fmtDuration, fmtPct, fmtUtc } from "@/lib/format";
 import type { CompareResponse, GapOut, IntervalOut, Statement } from "@/lib/types";
@@ -102,6 +104,7 @@ export function MetricsTable({ result, explain = false }: { result: CompareRespo
                 <span className="mr-1.5 font-bold text-text">{k === 0 ? "A" : "B"}</span>
                 {s.label}
                 {result.metadata.starts_differ && <div className="text-text tabular-nums">from {fmtUtc(s.start_utc).slice(0, 16)} UTC</div>}
+                {Math.abs(s.lat_deg) >= 80 && <div className="text-[12px] text-muted">smooth sphere</div>}
               </th>
             ))}
           </tr>
@@ -109,37 +112,46 @@ export function MetricsTable({ result, explain = false }: { result: CompareRespo
         <tbody>
           {rows.map((r) => {
             const fav = r.statement ? favors.get(r.statement) : undefined;
+            const showExplain = explain && !!r.explain;
             return (
-              <tr key={r.label} className="border-b border-line align-top">
-                <th scope="row" className="py-3 pr-3 text-left font-normal text-text">
-                  {r.label}
-                  {explain && r.explain && <div className="mt-1 max-w-[240px] text-[13px] leading-[18px] text-muted">{r.explain}</div>}
-                  {r.hint && <div className="mt-1 max-w-[240px] text-[13px] leading-[18px] text-muted">{r.hint}</div>}
-                </th>
-                {[a, b].map((s) => {
-                  const v = r.value(s.metrics);
-                  const win = fav === s.id;
-                  return (
-                    <td key={s.id} className="py-3 pr-3">
-                      <div className={`tabular-nums ${win ? "font-bold" : ""}`}>
-                        {v.main}
-                        {win && (
-                          <>
-                            <FavMark />
-                            <span className="sr-only"> (favoured on this criterion)</span>
-                          </>
-                        )}
-                      </div>
-                      {v.sub && <div className="text-[13px] leading-[18px] tabular-nums text-muted">{v.sub}</div>}
-                      {r.bar && (
-                        <div className="mt-2 h-[6px] w-[150px] max-w-full bg-line" aria-hidden>
-                          <div className={`h-full ${r.bar.fill}`} style={{ width: `${Math.max(0, Math.min(1, r.bar.value(s.metrics))) * 100}%` }} />
+              <Fragment key={r.label}>
+                <tr className={`align-top ${showExplain ? "" : "border-b border-line"}`}>
+                  <th scope="row" className="py-3 pr-3 text-left font-normal text-text">
+                    {r.label}
+                    {r.hint && <div className="mt-1 max-w-[240px] text-[13px] leading-[18px] text-muted">{r.hint}</div>}
+                  </th>
+                  {[a, b].map((s) => {
+                    const v = r.value(s.metrics);
+                    const win = fav === s.id;
+                    return (
+                      <td key={s.id} className="py-3 pr-3">
+                        <div className={`tabular-nums ${win ? "font-bold" : ""}`}>
+                          {v.main}
+                          {win && (
+                            <>
+                              <FavMark />
+                              <span className="sr-only"> (favoured on this criterion)</span>
+                            </>
+                          )}
                         </div>
-                      )}
+                        {v.sub && <div className="text-[13px] leading-[18px] tabular-nums text-muted">{v.sub}</div>}
+                        {r.bar && (
+                          <div className="mt-2 h-[6px] w-[150px] max-w-full bg-line" aria-hidden>
+                            <div className={`h-full ${r.bar.fill}`} style={{ width: `${Math.max(0, Math.min(1, r.bar.value(s.metrics))) * 100}%` }} />
+                          </div>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+                {showExplain && (
+                  <tr className="border-b border-line">
+                    <td colSpan={3} className="pb-3">
+                      <p className="-mt-1 max-w-[560px] text-[13px] leading-[18px] text-muted">{r.explain}</p>
                     </td>
-                  );
-                })}
-              </tr>
+                  </tr>
+                )}
+              </Fragment>
             );
           })}
         </tbody>

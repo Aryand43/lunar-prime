@@ -128,6 +128,7 @@ export function SiteCard({
         id={`${uid}-preset`}
         className={inputCls}
         value={draft.presetKey}
+        title={preset?.label ?? "Custom coordinates"}
         onChange={(e) => {
           const p = PRESETS.find((x) => x.key === e.target.value);
           if (p) onChange({ presetKey: p.key, label: p.label, lat: String(p.lat), lon: String(p.lon) });
