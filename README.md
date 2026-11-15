@@ -19,6 +19,8 @@ Compare two lunar landing sites by **geometric sunlight** and **direct-to-Earth 
 
 **Elevation up front, and libration stated (U2).** Each sky plot now starts with the current Sun and Earth elevations as two large figures; a body below the horizon is shown in grey with "below horizon". The Method section has a Libration row: libration is included, because Earth's motion in the lunar sky comes from the DE440 lunar orientation and orbit. That is why Earth rises and sets at sites near the limb and the poles.
 
+**South-pole presets first (U3).** The preset list now has two groups. "South pole" comes first: IM-2 Athena at Mons Mouton, the Shackleton rim where it meets the de Gerlache ridge, a high-illumination point on the de Gerlache ridge, IM-1 Odysseus near Malapert A, Chandrayaan-3 at Statio Shiv Shakti, and the Shackleton crater floor. "Elsewhere on the Moon" holds Apollo 11, Apollo 17, Blue Ghost Mission 1, Chang'e 4, Mare Orientale and Peary. The first screen now compares IM-2 with the Shackleton rim. Each coordinate's source is noted in `frontend/src/lib/sites.ts`. The de Gerlache point was checked only against the Wikipedia table that cites Gläser et al. (2017), not against the paper itself. Limitation: the ridge and rim sites are exactly where terrain matters most, and this model uses a smooth sphere, so their sunlight numbers are geometric upper bounds, not predictions.
+
 ## Quick start
 
 Prerequisites: [uv](https://docs.astral.sh/uv/) (it provisions Python 3.12), Node 20+.
@@ -160,7 +162,7 @@ Errors return `{"error": {"code", "message", "details": [{field, message}]}}` wi
 
 These are not modelled. Each one is also listed in every response and in the UI.
 
-- **Terrain.** Crater walls and ridges are ignored. At polar sites terrain dominates real illumination. For example, the Shackleton preset uses the crater centre, whose real floor is permanently shadowed. The "near horizon" metric flags results that terrain could overturn.
+- **Terrain.** Crater walls and ridges are ignored. At polar sites terrain dominates real illumination. For example, the "Shackleton crater floor" preset uses the crater centre, whose real floor is permanently shadowed, and the ridge and rim presets depend on local heights the model does not have. The "near horizon" metric flags results that terrain could overturn.
 - **Finite discs.** The Sun's ~0.27° and Earth's ~0.95° angular radii are not modelled. Visibility is judged by the centre only.
 - **Eclipses.** Earth occultation of the Sun is not modelled.
 - **Power.** No panel geometry, efficiency, dust, or thermal effects.

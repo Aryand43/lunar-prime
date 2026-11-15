@@ -2,7 +2,7 @@
 
 import { useId } from "react";
 
-import { PRESETS } from "@/lib/sites";
+import { PRESET_GROUPS, PRESETS } from "@/lib/sites";
 import type { Mode } from "@/lib/types";
 
 export interface SiteDraft {
@@ -125,8 +125,12 @@ export function SiteCard({
           else onChange({ ...draft, presetKey: "custom" });
         }}
       >
-        {PRESETS.map((p) => (
-          <option key={p.key} value={p.key}>{p.label}</option>
+        {PRESET_GROUPS.map((g) => (
+          <optgroup key={g} label={g}>
+            {PRESETS.filter((p) => p.group === g).map((p) => (
+              <option key={p.key} value={p.key}>{p.label}</option>
+            ))}
+          </optgroup>
         ))}
         <option value="custom">Custom coordinates</option>
       </select>
