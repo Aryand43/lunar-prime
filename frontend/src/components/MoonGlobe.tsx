@@ -207,28 +207,24 @@ function PathLine({ path }: { path: GlobePath }) {
 
 /** Day-night boundary: the great circle perpendicular to the subsolar direction. */
 function Terminator({ subsolar }: { subsolar: { lat: number; lon: number } }) {
-  const line = useMemo(() => {
+  const geom = useMemo(() => {
     const n = new THREE.Vector3(...latLonToVec3(subsolar.lat, subsolar.lon, 1)).normalize();
     const u = new THREE.Vector3(0, 1, 0).cross(n);
     if (u.lengthSq() < 1e-8) u.set(1, 0, 0);
     u.normalize();
     const v = new THREE.Vector3().crossVectors(n, u).normalize();
     const pts: THREE.Vector3[] = [];
-    for (let k = 0; k <= 256; k++) {
+    for (let k = 0; k < 256; k++) {
       const t = (k / 256) * Math.PI * 2;
       pts.push(u.clone().multiplyScalar(Math.cos(t)).add(v.clone().multiplyScalar(Math.sin(t))).multiplyScalar(1.002));
     }
-    const g = new THREE.BufferGeometry().setFromPoints(pts);
-    return new THREE.Line(g, new THREE.LineBasicMaterial({ color: "#B8B8B8", transparent: true, opacity: 0.7 }));
+    return new THREE.BufferGeometry().setFromPoints(pts);
   }, [subsolar.lat, subsolar.lon]);
-  useEffect(
-    () => () => {
-      line.geometry.dispose();
-      (line.material as THREE.Material).dispose();
-    },
-    [line],
+  return (
+    <lineLoop geometry={geom}>
+      <lineBasicMaterial color="#B8B8B8" transparent opacity={0.7} depthWrite={false} />
+    </lineLoop>
   );
-  return <primitive object={line} />;
 }
 
 function CameraRig({ view }: { view: Props["view"] }) {
