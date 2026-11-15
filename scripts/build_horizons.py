@@ -48,6 +48,8 @@ def presets(group: str | None = "South pole") -> list[dict]:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--only", help="comma-separated preset keys")
+    ap.add_argument("--maps", default="LDEM_80S_80MPP_ADJ.TIF,LDEM_60S_240MPP_ADJ.TIF",
+                    help="comma-separated map files in backend/terrain (default: both)")
     args = ap.parse_args()
 
     sites = presets()
@@ -59,7 +61,7 @@ def main() -> None:
 
     print(f"Loading LOLA maps from {config.TERRAIN_DIR} ...")
     t0 = time.perf_counter()
-    lola = terrain.Terrain.from_dir(config.TERRAIN_DIR, with_sha=True)
+    lola = terrain.Terrain.from_dir(config.TERRAIN_DIR, names=tuple(args.maps.split(",")), with_sha=True)
     print(f"  loaded in {time.perf_counter() - t0:.1f} s: " + ", ".join(f"{d.name} ({d.pixel_m:.0f} m/px)" for d in lola.dems))
 
     config.HORIZON_DIR.mkdir(parents=True, exist_ok=True)
