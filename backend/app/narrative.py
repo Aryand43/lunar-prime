@@ -42,8 +42,8 @@ def build(
 ) -> tuple[str, list[Statement], float]:
     tol = max(2.0 * step_s, 0.005 * window_s)
     stmts: list[Statement] = []
-    # (phrase used in the headline, favoured id) for each decisive comparison, in priority order
-    decisive: dict[str, tuple[str, str]] = {}
+    # (headline phrase without a subject, favoured id, favoured label) for each decisive comparison
+    decisive: dict[str, tuple[str, str, str]] = {}
 
     def more_is_better(key: str, noun: str, va: float, fa: float, vb: float, fb: float, headline: str):
         if abs(va - vb) < tol:
@@ -60,7 +60,7 @@ def build(
             id=key, kind="comparison", favors=win_id,
             text=f"{win} has more {noun}: {fmt_duration(hi)} ({_pct(fhi)}) vs {fmt_duration(lo)} ({_pct(flo)}) at {lose}.",
         ))
-        decisive[key] = (f"{win} has {headline}", win_id)
+        decisive[key] = (headline, win_id, win)
 
     def shorter_gap_is_better(key: str, noun: str, ma: BodyMetrics, mb: BodyMetrics, headline: str):
         da, la = _gap(ma)
@@ -88,7 +88,7 @@ def build(
             id=key, kind="comparison", favors=short_id,
             text=f"{short}'s longest {noun} is shorter: {short_txt}, against {_gap_str(l_d, l_lb)} at {long_}.",
         ))
-        decisive[key] = (f"{short} has {headline}", short_id)
+        decisive[key] = (headline, short_id, short)
 
     more_is_better("sun_duration", "sunlight", a.sun.visible_duration_s, a.sun.visible_fraction,
                    b.sun.visible_duration_s, b.sun.visible_fraction, "more sunlight during this window")
@@ -97,9 +97,9 @@ def build(
                    "more Earth visibility")
     more_is_better("both_duration", "simultaneous sunlight and Earth visibility", a.both_duration_s,
                    a.both_fraction, b.both_duration_s, b.both_fraction, "more simultaneous sunlight and Earth visibility")
-    shorter_gap_is_better("sun_gap", "night", a.sun, b.sun, "a shorter maximum period without sunlight")
+    shorter_gap_is_better("sun_gap", "night", a.sun, b.sun, "a shorter longest night")
     shorter_gap_is_better("earth_gap", "Earth outage", a.earth, b.earth,
-                          "a shorter maximum Earth-visibility gap")
+                          "a shorter longest Earth outage")
 
     # Observations: absolute conditions, stated per site.
     for sid, label, m in ((a_id, a_label, a), (b_id, b_label, b)):
@@ -124,9 +124,14 @@ def build(
                 ))
 
     order = ["sun_duration", "earth_gap", "earth_duration", "sun_gap", "both_duration"]
-    picks = [decisive[k][0] for k in order if k in decisive][:2]
+    picks = [decisive[k] for k in order if k in decisive][:2]
     if not picks:
         headline = "The two sites perform similarly on these criteria during this window."
+    elif len(picks) == 1:
+        headline = f"{picks[0][2]} has {picks[0][0]}."
+    elif picks[0][1] == picks[1][1]:
+        # Same winner on both criteria: name it once.
+        headline = f"{picks[0][2]} has {picks[0][0]} and {picks[1][0]}."
     else:
-        headline = ". ".join(picks) + "."
+        headline = f"{picks[0][2]} has {picks[0][0]}. {picks[1][2]} has {picks[1][0]}."
     return headline, stmts, tol

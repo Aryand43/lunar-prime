@@ -126,7 +126,9 @@ def test_no_site_starts_matches_behaviour_before_u4(client):
     """Without sites[].start_utc the existing fields are unchanged (fixture captured before U4, synthetic provider)."""
     d = client.post("/api/compare", json=BASELINE_BODY).json()
     fx = json.loads(FIXTURE.read_text())
-    _close(fx["comparison"], d["comparison"], "comparison")
+    # The headline wording changed on purpose in F2 (see test_narrative.py); statements and tolerance must not.
+    _close(fx["comparison"]["statements"], d["comparison"]["statements"], "statements")
+    _close(fx["comparison"]["tolerance_s"], d["comparison"]["tolerance_s"], "tolerance")
     assert [d["timestamps_utc"][0], d["timestamps_utc"][-1]] == fx["timestamps_first_last"]
     assert d["metadata"]["n_samples"] == fx["n_samples"]
     _close(fx["subsolar_lon_every_50"], d["subpoints"]["subsolar_lon_deg"][::50], "subsolar")
