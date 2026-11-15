@@ -395,6 +395,19 @@ export default function LunarPrimeApp() {
             <section aria-label="Why this matters" className="border-b border-line pb-10">
               <h2 className="mb-1.5 text-[18px] leading-[24px] font-bold">Why this matters</h2>
               <p className="max-w-[820px] text-[15px] leading-[23px] text-text">{WHY_THIS_MATTERS}</p>
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => {
+                  // Rim vs floor of Shackleton: 10.8 km apart (great-circle distance between the two presets).
+                  const pair = [presetDraft("shackleton-rim"), presetDraft("shackleton")];
+                  setSites(pair);
+                  if (!windowErrors(win, maxSamples, coverage).start) run(buildRequest(pair, win));
+                }}
+                className="mt-3 rounded-[2px] border border-text bg-field px-3 py-1.5 text-[14px] font-bold text-text hover:bg-bg disabled:opacity-40"
+              >
+                See it: the rim and the floor of Shackleton crater, about 11 km apart
+              </button>
             </section>
           )}
 

@@ -35,7 +35,7 @@ export const PRESETS: SitePreset[] = [
     label: "Shackleton rim, ridge junction",
     lat: -89.684,
     lon: -163.261,
-    note: "Real sunlight here depends on the ridge height. This model uses a smooth sphere.",
+    note: "Real sunlight here depends on the ridge height, so this site uses the LOLA terrain skyline.",
     group: "South pole",
   },
   {
@@ -46,12 +46,12 @@ export const PRESETS: SitePreset[] = [
     label: "de Gerlache ridge, sunlit point",
     lat: -88.71,
     lon: -68.7,
-    note: "Real sunlight here depends on the ridge height. This model uses a smooth sphere.",
+    note: "Real sunlight here depends on the ridge height, so this site uses the LOLA terrain skyline.",
     group: "South pole",
   },
   {
     // NASA "NASA's LRO Images Intuitive Machines' Odysseus Lander" (Feb 2024): 80.13°S, 1.44°E.
-    key: "im1", terrain: true,
+    key: "im1",
     label: "IM-1 Odysseus, Malapert A",
     lat: -80.13,
     lon: 1.44,
@@ -60,7 +60,7 @@ export const PRESETS: SitePreset[] = [
   },
   {
     // USGS Gazetteer of Planetary Nomenclature, "Statio Shiv Shakti": 69.373°S, 32.319°E.
-    key: "chandrayaan3", terrain: true,
+    key: "chandrayaan3",
     label: "Chandrayaan-3, Shiv Shakti",
     lat: -69.373,
     lon: 32.319,
@@ -88,12 +88,21 @@ export const PRESETS: SitePreset[] = [
     note: "Where Firefly's Blue Ghost lander touched down in March 2025, on the lava plains of Mare Crisium.",
     group: "Elsewhere on the Moon",
   },
+  {
+    // Lunar Vertex team, "Selection and characterization of the landing site for NASA CLPS PRISM1 lunar lander
+    // mission CP-11" (Blewett et al., LPSC 2023, abstract 1780, NASA NTRS 20230000531): 7.585 N, 58.725 W.
+    key: "im3",
+    label: "IM-3 (planned), Reiner Gamma",
+    lat: 7.585,
+    lon: -58.725,
+    note: "The planned landing site of Intuitive Machines' IM-3 mission, inside the Reiner Gamma lunar swirl.",
+    group: "Elsewhere on the Moon",
+  },
   { key: "change4", label: "Chang'e 4, von Kármán", lat: -45.4446, lon: 177.5991, note: "Far side: no direct line of sight to Earth.", group: "Elsewhere on the Moon" },
   { key: "orientale", label: "Mare Orientale, western limb", lat: -19.4, lon: -92.8, note: "Near the limb: Earth rises and sets with libration.", group: "Elsewhere on the Moon" },
   { key: "peary", label: "Peary crater, north pole", lat: 88.6, lon: 33.0, note: "North polar region; terrain ignored.", group: "Elsewhere on the Moon" },
 ];
 
-// The first screen compares two real CLPS landings at the south pole (the brief's focus).
-// The ridge and rim presets stay in the menu, but are not the default: their real sunlight depends on
-// terrain height, which the smooth-sphere model cannot show.
-export const DEFAULT_SITES = ["im2", "im1"] as const;
+// The first screen compares the Shackleton rim with IM-2's landing site. Both have LOLA terrain skylines,
+// so the rim's real advantage (height above the surrounding terrain) shows up.
+export const DEFAULT_SITES = ["shackleton-rim", "im2"] as const;
