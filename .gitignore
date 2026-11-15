@@ -12,3 +12,6 @@ __pycache__/
 
 # Private Node.js downloaded by run-lunar-prime.command
 .tools/
+
+# LOLA elevation and illumination maps from scripts/fetch_terrain.sh
+backend/terrain/
