@@ -91,15 +91,15 @@ def test_skyline_interpolation_wraps():
 
 # ----- real LOLA maps (skipped when absent) -----
 
+MAP_NAMES = [n for n in ("LDEM_80S_80MPP_ADJ.TIF", "LDEM_60S_240MPP_ADJ.TIF") if (TERRAIN_DIR / n).exists()]
 real = pytest.mark.skipif(
-    not (TERRAIN_DIR / "LDEM_80S_80MPP_ADJ.TIF").exists() or not (TERRAIN_DIR / "LDEM_60S_240MPP_ADJ.TIF").exists(),
-    reason="LOLA maps not downloaded; run scripts/fetch_terrain.sh",
+    "LDEM_80S_80MPP_ADJ.TIF" not in MAP_NAMES, reason="LOLA 80 m map not downloaded; run scripts/fetch_terrain.sh"
 )
 
 
 @pytest.fixture(scope="module")
 def lola():
-    return terrain.Terrain.from_dir(TERRAIN_DIR)
+    return terrain.Terrain.from_dir(TERRAIN_DIR, names=tuple(MAP_NAMES))
 
 
 @real
@@ -107,7 +107,7 @@ def test_real_maps_projection_and_range(lola):
     for d in lola.dems:
         h = d.heights[np.isfinite(d.heights)]
         assert -9_500 < h.min() and h.max() < 9_500, d.name
-    assert [d.name for d in lola.dems] == ["LDEM_80S_80MPP_ADJ.TIF", "LDEM_60S_240MPP_ADJ.TIF"]
+    assert [d.name for d in lola.dems] == MAP_NAMES  # finest first
 
 
 @real

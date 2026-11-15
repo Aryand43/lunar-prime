@@ -7,9 +7,11 @@ Compare two lunar landing sites by **geometric sunlight** and **direct-to-Earth 
 - Scrub through time. The globe is lit from the computed subsolar point, and a local-horizon sky plot shows the Sun and Earth for each site, with their current elevations and how long until each one next sets or rises.
 - Read the answer first: a two-sentence headline, findings and a metrics table. An "Explain" switch adds a plain sentence under each number.
 - Compare synchronized elevation timelines and refined visibility intervals, and list every sunlight and Earth-contact window.
+- At four south-pole presets, use **real terrain**: the horizon is the skyline computed from NASA's LOLA elevation map, and the sky plots draw it.
+- Hover over a sky plot, figure, countdown, metric or button for a short explanation.
 - Read the method, limitations, kernel provenance (with SHA-256), and export the full result as JSON.
 
-> **Scope.** "Visible" means the body's **centre** is above an **ideal, terrain-free horizon** (elevation > 0°). Sunlight is not electrical power. Earth visibility is not a guaranteed communication link. See [Limitations](#limitations).
+> **Scope.** "Visible" means the body's **centre** is above the horizon: the **LOLA terrain skyline** at sites marked "Terrain horizon (LOLA)", and an **ideal, terrain-free horizon** (elevation > 0°) everywhere else. Sunlight is not electrical power. Earth visibility is not a guaranteed communication link. See [Limitations](#limitations).
 
 ## What's new (November 2026)
 
@@ -25,7 +27,7 @@ Terrain limits: visibility is judged by the centre of the Sun and of Earth, not 
 
 **Route planner removed (V1).** The challenge is about choosing where and when to land, not about driving, so the route planner tab is gone. Its last version is kept under the Git tag `route-planner-archive`.
 
-**Design refresh.** A light page with one font (Atkinson Hyperlegible Next). Colour is used only for the two bodies: yellow for the Sun, blue for Earth. The answer comes first: a two-sentence headline, the findings and a metrics table with bars, then the globe and sky plots, then the timelines.
+**Design refresh.** A light page with one font (Atkinson Hyperlegible Next). Colour is used only for the two bodies: yellow for the Sun, blue for Earth. The metrics table has bars; the layout was later reordered to put the picture first (V2, below).
 
 **Time until the next change (U1).** Under each sky plot, one line per body says how long until it sets or rises at the scrubber time, for example "Sun sets in 4.2 d", with the UTC time of that event. When the change falls after the window ends, the line says so: "Earth stays up for at least 6.0 d (to the end of the window)". The times come from the refined rise and set intervals the API already returns, so they are as accurate as those intervals (±1 s refinement). A body that rises or sets more than once between two samples can still be missed, as before.
 
@@ -43,6 +45,8 @@ Terrain limits: visibility is judged by the centre of the Sun and of Earth, not 
 
 Prerequisites: [uv](https://docs.astral.sh/uv/) (it provisions Python 3.12), Node 20+.
 
+On a Mac, double-click `run-lunar-prime.command`: it fetches the SPICE kernels once, downloads a private Node if none is installed, and starts both servers. Or step by step:
+
 ```bash
 ./scripts/fetch_kernels.sh
 ```
@@ -56,6 +60,13 @@ cd frontend && npm install && npm run dev
 ```
 
 Open http://localhost:3000. Next.js proxies `/api/*` to the backend. Set `BACKEND_URL` if the backend is not at `http://127.0.0.1:8000`.
+
+Terrain skylines for the presets are committed in `backend/data/horizons/`, so the app needs no map download. To rebuild them or run the terrain checks, fetch the LOLA maps (about 390 MB, plus about 260 MB of NASA illumination maps for validation; `--no-validation` skips those):
+
+```bash
+./scripts/fetch_terrain.sh
+cd backend && uv run python ../scripts/build_horizons.py && uv run python ../scripts/validate_terrain.py
+```
 
 Tests:
 
@@ -71,13 +82,18 @@ cd frontend && npm run lint && npx tsc --noEmit && npm run build
 
 ```
 scripts/fetch_kernels.sh   reproducible kernel download from naif.jpl.nasa.gov
+scripts/fetch_terrain.sh   LOLA elevation maps (PGDA product 90) and NASA illumination maps, resumable
+scripts/build_horizons.py  precompute terrain skylines for the south-pole presets
+scripts/validate_terrain.py permanent-shadow check and comparison with NASA's illumination maps
+backend/data/horizons/     committed skyline files (720 directions each)
 backend/app/
   config.py      conventions, limits, kernel list (single source of truth, echoed in responses)
   kernels.py     load kernels once at startup, coverage window, SHA-256, global SPICE lock
   geometry.py    site vector, ENU basis, topocentric az/el; SPICE and synthetic providers
   analysis.py    visibility intervals, bisection refinement, gaps, intersections
   narrative.py   deterministic comparison statements with tolerances
-  service.py     request orchestration
+  service.py     request orchestration; terrain skyline lookup per site
+  terrain.py     LOLA map loading, projection, bilinear heights, 720-direction horizon profiles
   models.py      typed Pydantic request/response contracts
   main.py        FastAPI: GET /api/health, POST /api/compare
 frontend/src/
@@ -93,11 +109,11 @@ No database, authentication, or chatbot.
 |---|---|
 | Reference frame | `MOON_ME`: Mean-Earth/polar-axis lunar body-fixed frame, realized as `MOON_ME_DE440_ME421` (a fixed rotation from the DE440 principal-axis frame). This is the LRO/LOLA cartographic frame. |
 | Coordinates | Planetocentric latitude; **east-positive** longitude in (−180°, 180°]. |
-| Lunar shape | Sphere, R = 1737.4 km (IAU mean radius, checked against `BODY301_RADII` at startup). Site altitude 0. |
+| Lunar shape | Sphere, R = 1737.4 km (IAU mean radius, checked against `BODY301_RADII` at startup). Site altitude 0, except at terrain sites, where the observer is at 1737.4 km + LOLA surface height + 2 m. |
 | Aberration | `LT+S` (light time plus stellar aberration), applied to Moon-centred Sun/Earth vectors. |
 | Topocentric | `r_topo = r_body(Moon-centred, MOON_ME) − r_site`, projected onto the site's East/North/Up basis. |
 | Angles | Elevation = asin(U/|r|). Azimuth = atan2(E, N), clockwise from local north, in [0°, 360°). |
-| Visibility | Body centre elevation > 0° above the ideal horizon. |
+| Visibility | Body centre above the horizon: the LOLA terrain skyline in that direction at terrain sites (linear interpolation between 720 directions), 0° elsewhere. |
 | Time | UTC in and out; TDB internally via `naif0012.tls`. |
 
 **Sampling and refinement.** Elevations are sampled every `step_minutes`. Whenever visibility changes between two samples, the crossing time is refined by bisection on the true elevation function to ±1 s. Durations are sums of refined interval lengths, which is real elapsed time, not a count of samples. Events shorter than the sampling step can be missed, and the response reports both the step and the refinement tolerance.
@@ -113,6 +129,12 @@ No database, authentication, or chatbot.
   - Apollo 11 gets about 50% sunlight over a lunation.
 - **Sampling independence.** The sunrise time at 2-hour sampling agrees with 5-minute sampling to within 3 s.
 - **Interval logic.** Tested against analytic sine crossings, irregular final samples, gaps, and intersections.
+- **Terrain.**
+  - A skyline of 0° with zero heights reproduces the smooth-sphere result exactly (test). A +5° skyline removes all sunlight at a polar site (test).
+  - Flat synthetic ground gives the expected horizon dip for a 2 m observer (−0.087°); a synthetic peak due north gives the highest skyline at azimuth 0° (tests).
+  - Heights: the 80 m map gives 2,592 m at IM-1's landing point; NASA's LRO release gives 2,579 m.
+  - The Shackleton crater floor gets 0.00% sunlight over 2027 at hourly steps (`scripts/validate_terrain.py`).
+  - **Not yet done:** the comparison with NASA's average Sun and Earth visibility maps.
 
 ## Kernels
 
@@ -180,7 +202,7 @@ Errors return `{"error": {"code", "message", "details": [{field, message}]}}` wi
 
 These are not modelled. Each one is also listed in every response and in the UI.
 
-- **Terrain.** Crater walls and ridges are ignored. At polar sites terrain dominates real illumination. For example, the "Shackleton crater floor" preset uses the crater centre, whose real floor is permanently shadowed, and the ridge and rim presets depend on local heights the model does not have. The "near horizon" metric flags results that terrain could overturn.
+- **Terrain.** Included only at the four presets marked "Terrain horizon (LOLA)" (Shackleton rim, de Gerlache ridge, Shackleton crater floor, IM-2). Everywhere else, including IM-1 and Chandrayaan-3 and any site you pick or type, crater walls and ridges are ignored; there the "near horizon" metric flags results that terrain could overturn. The skylines come from the 80 m map only, so peaks narrower than that are smoothed, and terrain farther than 163 to 292 km (the map's edge) is not included; at those distances the Moon's curvature hides even the tallest relief. The observer is 2 m above the surface. The map uses the DE421 realisation of MOON_ME and Lunar Prime uses DE440; the difference is a few metres. The terrain results have not yet been compared with NASA's illumination maps.
 - **Finite discs.** The Sun's ~0.27° and Earth's ~0.95° angular radii are not modelled. Visibility is judged by the centre only.
 - **Eclipses.** Earth occultation of the Sun is not modelled.
 - **Power.** No panel geometry, efficiency, dust, or thermal effects.
@@ -191,4 +213,5 @@ These are not modelled. Each one is also listed in every response and in the UI.
 ## Credits
 
 - Ephemerides and orientation: NASA/JPL NAIF generic kernels.
+- Terrain: NASA GSFC PGDA product 90, "A New View of the Lunar South Pole from LOLA" (Barker et al. 2023, Planet. Sci. J. 4, 183).
 - Globe basemap: NASA Scientific Visualization Studio *CGI Moon Kit*: LRO LROC WAC colour mosaic and LOLA elevation (public domain), in `frontend/public/textures/`.
