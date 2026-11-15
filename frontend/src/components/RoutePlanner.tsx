@@ -418,7 +418,7 @@ export default function RoutePlanner({ active }: { active: boolean }) {
             </div>
           )}
           {res?.route?.trajectory && (
-            <Panel title="Sun and Earth elevation along the moving trajectory" aside={<span className="text-[13px] text-muted">shaded = waiting · dotted = ideal horizon · click to set time</span>}>
+            <Panel title="Sun and Earth elevation along the moving trajectory" aside={<span className="text-[13px] text-muted">Shaded periods are waits. The dashed line is the ideal horizon. Click the chart to set the time.</span>}>
               <TrajectoryChart plan={res.route} index={i} onSelectTime={onSelectTime} />
             </Panel>
           )}

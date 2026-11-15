@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { fmtDuration, fmtUtc } from "@/lib/format";
+import { fmtUtc } from "@/lib/format";
 import type { CompareResponse } from "@/lib/types";
 
 interface Props {
@@ -123,7 +123,7 @@ export default function Scrubber({ result, index, onIndex }: Props) {
       />
       <div className="flex items-baseline gap-2 tabular-nums text-[12px] tabular-nums">
         <span className="text-text">{fmtUtc(result.timestamps_utc[index])}</span>
-        <span className="text-muted">T+{fmtDuration(result.elapsed_s[index])}</span>
+        <span className="text-muted">day {(result.elapsed_s[index] / 86400).toFixed(1)}</span>
       </div>
     </div>
   );

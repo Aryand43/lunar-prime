@@ -237,7 +237,7 @@ export function ObjectiveCard({ p, onChange }: { p: PlannerParams; onChange: (p:
       <legend className="sr-only">Objective</legend>
       <div className="text-[18px] leading-[24px] font-bold">Objective weights</div>
       <p className="tabular-nums text-[13px] leading-snug text-muted">
-        cost = w<sub>d</sub>·km/{p.distanceScaleKm || "?"} + w<sub>☉</sub>·dark h/{p.exposureScaleHours || "?"} + w<sub>⊕</sub>·Earth-invisible h/{p.exposureScaleHours || "?"}
+        cost = distance weight × km / {p.distanceScaleKm || "?"} + darkness weight × dark hours / {p.exposureScaleHours || "?"} + Earth-gap weight × hours without Earth / {p.exposureScaleHours || "?"}
       </p>
       <div className="grid grid-cols-3 gap-2">
         <Field label="Distance" value={p.wDistance} onChange={set("wDistance")} err={e.wDistance} />

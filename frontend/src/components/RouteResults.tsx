@@ -34,8 +34,8 @@ export function RouteSummary({ res }: { res: RouteResponse }) {
       <div className="flex flex-wrap items-center gap-1 tabular-nums text-[13px]">
         {res.route.visited.map((id, i) => (
           <span key={id + i} className="flex items-center gap-1">
-            <span className={`rounded-[2px] px-1.5 py-0.5 ${i === res.route!.visited.length - 1 ? "border border-danger" : i === 0 ? "border border-line" : "border border-text font-bold text-text"}`}>
-              {i > 0 && i < res.route!.visited.length - 1 ? `${i} · ` : ""}
+            <span className={`rounded-[2px] px-1.5 py-0.5 ${i === res.route!.visited.length - 1 ? "border border-text bg-text font-bold text-bg" : i === 0 ? "border border-line bg-field" : "border border-text font-bold text-text"}`}>
+              {i > 0 && i < res.route!.visited.length - 1 ? `${i}. ` : ""}
               {id}
             </span>
             {i < res.route!.visited.length - 1 && <span className="text-muted">→</span>}
@@ -48,7 +48,7 @@ export function RouteSummary({ res }: { res: RouteResponse }) {
         {stat("Darkness", h(m.darkness_s), `longest ${h(m.longest_darkness_s)}`)}
         {stat("Earth-invisible", h(m.earth_invisible_s), `longest ${h(m.longest_earth_invisible_s)}`)}
         {stat("Moving / waiting", `${h(m.movement_s)} / ${h(m.waiting_s)}`, m.alignment_wait_s > 0 ? `${h(m.alignment_wait_s)} grid alignment` : undefined)}
-        {stat("Objective cost", m.cost.total.toFixed(3), `d ${m.cost.distance.toFixed(2)} · ☉ ${m.cost.darkness.toFixed(2)} · ⊕ ${m.cost.earth_invisible.toFixed(2)}`)}
+        {stat("Objective cost", m.cost.total.toFixed(3), `distance ${m.cost.distance.toFixed(2)}, darkness ${m.cost.darkness.toFixed(2)}, Earth ${m.cost.earth_invisible.toFixed(2)}`)}
       </div>
       <ul className="space-y-1.5">
         {res.explanation.map((s) => (
@@ -79,14 +79,13 @@ export function ComparisonTable({ res }: { res: RouteResponse }) {
             <tr className="border-b border-line text-left text-[13px] text-muted">
               <th scope="col" className="py-1.5 pr-3 font-bold">Metric</th>
               <th scope="col" className="py-1.5 pr-3 text-right font-bold">Optimized</th>
-              <th scope="col" className="py-1.5 pr-3 text-right font-bold">Shortest-dist.</th>
-              <th scope="col" className="py-1.5 text-right font-bold">Δ (opt − base)</th>
+              <th scope="col" className="py-1.5 pr-3 text-right font-bold">Shortest distance</th>
+              <th scope="col" className="py-1.5 text-right font-bold">Difference</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => {
               const better = r.difference !== null && Math.abs(r.difference) > 1e-9 && (r.lower_is_better ? r.difference < 0 : r.difference > 0);
-              const worse = r.difference !== null && Math.abs(r.difference) > 1e-9 && !better;
               return (
                 <tr key={r.metric} className="border-b border-line/60">
                   <th scope="row" className="py-1.5 pr-3 text-left font-normal text-muted">
@@ -94,8 +93,14 @@ export function ComparisonTable({ res }: { res: RouteResponse }) {
                   </th>
                   <td className="py-1.5 pr-3 text-right tabular-nums text-text">{fmtVal(r.optimized, r.unit)}</td>
                   <td className="py-1.5 pr-3 text-right tabular-nums text-muted">{fmtVal(r.baseline, r.unit)}</td>
-                  <td className={`py-1.5 text-right tabular-nums ${better ? "text-text font-bold" : worse ? "text-sun-ink" : "text-muted"}`}>
+                  <td className={`py-1.5 text-right tabular-nums ${better ? "font-bold text-text" : "text-text"}`}>
                     {r.difference === null ? "—" : `${r.difference > 0 ? "+" : ""}${fmtVal(r.difference, r.unit)}`}
+                    {better && (
+                      <svg width={8} height={10} viewBox="0 0 8 10" className="ml-1.5 inline-block align-[1px]" aria-hidden>
+                        <path d="M0 0l8 5-8 5z" fill="currentColor" />
+                      </svg>
+                    )}
+                    {better && <span className="sr-only"> (optimized route is better on this metric)</span>}
                     {r.percent_change !== null && Math.abs(r.difference ?? 0) > 1e-9 && (
                       <span className="ml-1 text-[13px] text-muted">({r.percent_change > 0 ? "+" : ""}{r.percent_change.toFixed(1)}%)</span>
                     )}
@@ -109,7 +114,7 @@ export function ComparisonTable({ res }: { res: RouteResponse }) {
       <p className="text-[13px] leading-snug text-muted">
         Baseline: {res.baseline.feasible && res.baseline.plan ? res.baseline.plan.visited.join(" → ") : res.baseline.reason}. Same speed,
         departure, sampling and Sun/Earth model; departs immediately with no waiting. Percentages are omitted when the baseline value is 0.{" "}
-        <span className="text-text font-bold">Teal</span> = better, <span className="text-sun-ink">amber</span> = worse for that single metric.
+        Difference is optimized minus baseline. Bold with a triangle marks where the optimized route is better on that single metric.
       </p>
       <p className="text-[13px] leading-snug text-muted">
         Direct great circle ({res.direct.distance_km.toFixed(1)} km):{" "}
