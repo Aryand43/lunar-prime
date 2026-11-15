@@ -11,6 +11,12 @@ Compare two lunar landing sites by **geometric sunlight** and **direct-to-Earth 
 
 > **Scope.** "Visible" means the body's **centre** is above an **ideal, terrain-free horizon** (elevation > 0°). Sunlight is not electrical power. Earth visibility is not a guaranteed communication link. See [Limitations](#limitations).
 
+## What's new (November 2026)
+
+**Design refresh.** A light page with one font (Atkinson Hyperlegible Next). Colour is used only for the two bodies: yellow for the Sun, blue for Earth. The answer comes first: a two-sentence headline, the findings and a metrics table with bars, then the globe and sky plots, then the timelines.
+
+**Time until the next change (U1).** Under each sky plot, one line per body says how long until it sets or rises at the scrubber time, for example "Sun sets in 4.2 d", with the UTC time of that event. When the change falls after the window ends, the line says so: "Earth stays up for at least 6.0 d (to the end of the window)". The times come from the refined rise and set intervals the API already returns, so they are as accurate as those intervals (±1 s refinement). A body that rises or sets more than once between two samples can still be missed, as before.
+
 ## Quick start
 
 Prerequisites: [uv](https://docs.astral.sh/uv/) (it provisions Python 3.12), Node 20+.
