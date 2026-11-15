@@ -9,3 +9,6 @@ __pycache__/
 .pytest_cache/
 
 .DS_Store
+
+# Private Node.js downloaded by run-lunar-prime.command
+.tools/
