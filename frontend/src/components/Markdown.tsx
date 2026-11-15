@@ -19,7 +19,7 @@ export default function Markdown({ text, refs, onRef }: { text: string; refs: Ch
       if (m.index! > last) out.push(s.slice(last, m.index));
       const t = m[0];
       const k = `${key}-${i++}`;
-      if (t.startsWith("**")) out.push(<strong key={k} className="font-semibold text-text">{t.slice(2, -2)}</strong>);
+      if (t.startsWith("**")) out.push(<strong key={k} className="font-semibold text-white">{t.slice(2, -2)}</strong>);
       else if (t.startsWith("`")) out.push(<code key={k} className="rounded bg-black/40 px-1 font-mono text-[11.5px]">{t.slice(1, -1)}</code>);
       else if (t.startsWith("[")) {
         const r = byN.get(Number(t.slice(1, -1)));
@@ -48,7 +48,7 @@ export default function Markdown({ text, refs, onRef }: { text: string; refs: Ch
   };
 
   const blocks: ReactNode[] = [];
-  const lines = text.replace(/\r/g, "").split("\n");
+  const lines = text.replace(/\r/g, "").replace(/\][ \t]+\[(?=\d)/g, "][").replace(/[ \t]+(\[\d{1,3}\])/g, "$1").split("\n");
   let list: { ordered: boolean; items: string[] } | null = null;
   let para: string[] = [];
   const flushPara = () => {
@@ -59,7 +59,7 @@ export default function Markdown({ text, refs, onRef }: { text: string; refs: Ch
     if (!list) return;
     const k = `l${blocks.length}`;
     const items = list.items.map((it, j) => <li key={j}>{inline(it, `${k}-${j}`)}</li>);
-    blocks.push(list.ordered ? <ol key={k} className="ml-4 list-decimal space-y-0.5">{items}</ol> : <ul key={k} className="ml-4 list-disc space-y-0.5">{items}</ul>);
+    blocks.push(list.ordered ? <ol key={k} className="ml-4 list-decimal space-y-1 marker:text-faint">{items}</ol> : <ul key={k} className="ml-4 list-disc space-y-1 marker:text-faint">{items}</ul>);
     list = null;
   };
   for (const raw of lines) {
@@ -87,5 +87,5 @@ export default function Markdown({ text, refs, onRef }: { text: string; refs: Ch
   }
   flushPara();
   flushList();
-  return <div className="space-y-1.5">{blocks}</div>;
+  return <div className="space-y-2 text-text">{blocks}</div>;
 }

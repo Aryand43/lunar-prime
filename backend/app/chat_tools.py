@@ -34,6 +34,18 @@ def _fmt(dt: datetime) -> str:
     return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def fmt_dur(seconds: float) -> str:
+    """Human-readable duration matching how the UI shows it."""
+    s = float(seconds or 0)
+    if s < 120:
+        return f"{s:.0f} s"
+    if s < 2 * 3600:
+        return f"{s / 60:.0f} min"
+    if s < 48 * 3600:
+        return f"{s / 3600:.1f} h"
+    return f"{s / 86400:.1f} d ({s / 3600:.0f} h)"
+
+
 def base_labels(resp: dict) -> dict[str, dict]:
     return {b["id"]: b for b in resp.get("bases", [])}
 
@@ -64,9 +76,23 @@ def run_summary(run: dict) -> dict:
     if route:
         out["visited"] = [dict(id=v, label=bases.get(v, {}).get("label"), kind=bases.get(v, {}).get("kind", "user"))
                           for v in route["visited"]]
-        out["metrics"] = route["metrics"]
-        out["metrics_hours"] = {k.replace("_s", "_h"): round(v / 3600, 4) for k, v in route["metrics"].items()
+        m = route["metrics"]
+        out["metrics"] = m
+        out["metrics_hours"] = {k.replace("_s", "_h"): round(v / 3600, 4) for k, v in m.items()
                                 if k.endswith("_s") and isinstance(v, (int, float))}
+        out["display"] = {
+            "distance": f"{m['distance_km']:.1f} km", "travel_time": fmt_dur(m["elapsed_s"]),
+            "moving_time": fmt_dur(m["movement_s"]), "waiting_time": fmt_dur(m["waiting_s"]),
+            "darkness": fmt_dur(m["darkness_s"]), "earth_out_of_view": fmt_dur(m["earth_invisible_s"]),
+            "sun_and_earth_visible": fmt_dur(m["both_visible_s"]), "longest_darkness": fmt_dur(m["longest_darkness_s"]),
+            "longest_earth_out_of_view": fmt_dur(m["longest_earth_invisible_s"]),
+            "darkness_share": f"{100 * m['darkness_s'] / max(m['elapsed_s'], 1):.0f}% of the trip",
+            "weighted_score": f"{m['cost']['total']:.3f} (distance {m['cost']['distance']:.3f}, darkness "
+                              f"{m['cost']['darkness']:.3f}, Earth out of view {m['cost']['earth_invisible']:.3f})",
+            "departure": m["departure_utc"].replace("T", " ").replace("Z", " UTC"),
+            "arrival": m["arrival_utc"].replace("T", " ").replace("Z", " UTC"),
+            "stops": " -> ".join(v["label"] or v["id"] for v in out["visited"]),
+        }
     out["refs"] = {
         "distance": f"run:{rid}#metrics.distance_km", "elapsed": f"run:{rid}#metrics.elapsed_s",
         "darkness": f"run:{rid}#metrics.darkness_s", "earth_invisible": f"run:{rid}#metrics.earth_invisible_s",
@@ -112,7 +138,10 @@ def visibility_intervals(run: dict, body: str) -> dict:
     def iv(vis, a, b, k):
         segs = sorted({tr["segment_index"][j] for j in range(len(t)) if a - 1e-6 <= t[j] <= b + 1e-6
                        and tr["segment_index"][j] >= 0})
-        return dict(index=k, start_utc=_fmt(t0 + timedelta(seconds=a)), end_utc=_fmt(t0 + timedelta(seconds=b)),
+        return dict(index=k, display=dict(duration=fmt_dur(b - a),
+                                          when=f"{_fmt(t0 + timedelta(seconds=a))[:16].replace('T', ' ')} to "
+                                               f"{_fmt(t0 + timedelta(seconds=b))[:16].replace('T', ' ')} UTC"),
+                    start_utc=_fmt(t0 + timedelta(seconds=a)), end_utc=_fmt(t0 + timedelta(seconds=b)),
                     start_elapsed_s=round(a, 1), duration_s=round(b - a, 1), duration_h=round((b - a) / 3600, 3),
                     segment_indices=segs[:20], ref=f"run:{rid}#intervals.{body}.{'visible' if vis else 'hidden'}[{k}]")
 
@@ -194,7 +223,12 @@ class Tools:
         labels = base_labels(run["response"])
         segs = []
         for i, s in enumerate(route["segments"][offset:offset + limit], start=offset):
-            segs.append(dict(index=i, kind=s["kind"], from_label=labels.get(s["base_id"], {}).get("label"),
+            segs.append(dict(index=i, kind=s["kind"],
+                             display=dict(duration=fmt_dur(s["duration_s"]), darkness=fmt_dur(s["darkness_s"]),
+                                          earth_out_of_view=fmt_dur(s["earth_invisible_s"]),
+                                          distance=f"{s['distance_km']:.1f} km",
+                                          when=f"{s['start_utc'][:16].replace('T', ' ')} to {s['end_utc'][:16].replace('T', ' ')} UTC"),
+                             from_label=labels.get(s["base_id"], {}).get("label"),
                              to_label=labels.get(s["to_id"], {}).get("label") if s.get("to_id") else None,
                              **{k: s[k] for k in ("base_id", "to_id", "start_utc", "end_utc", "duration_s",
                                                   "alignment_wait_s", "distance_km", "darkness_s",
@@ -206,7 +240,18 @@ class Tools:
         run = self._run(run_id)
         r = run["response"]
         b, d = r.get("baseline", {}), r.get("direct", {})
-        rows = [dict(row, ref=f"run:{run_id}#comparison[{row['metric']}]") for row in r.get("comparison", [])]
+        def show(v, unit):
+            if v is None:
+                return None
+            if unit == "h":
+                return fmt_dur(v * 3600)
+            return f"{v:.1f} km" if unit == "km" else f"{v:.3f}"
+
+        rows = [dict(row, ref=f"run:{run_id}#comparison[{row['metric']}]",
+                     display=dict(optimized=show(row["optimized"], row["unit"]), baseline=show(row["baseline"], row["unit"]),
+                                  difference=(("+" if (row["difference"] or 0) > 0 else "-") + show(abs(row["difference"]), row["unit"]))
+                                  if row["difference"] is not None else None))
+                for row in r.get("comparison", [])]
         return dict(run_id=run_id, rows=rows,
                     baseline=dict(name=b.get("name"), feasible=b.get("feasible"), reason=b.get("reason"),
                                   visited=(b.get("plan") or {}).get("visited")),
@@ -416,12 +461,27 @@ def _numbers_in(obj: Any, acc: set[float]) -> None:
                 pass
 
 
+TIME_RE = re.compile(r"(?<![\d:])(\d{1,2}):(\d{2})(?::\d{2})?(?![\d:])")
+MONTH_DAY_RE = re.compile(
+    r"\b(?:\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?(?:\s+\d{4})?|"
+    r"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+\d{4})?)\b")
+
+
 def unverified_numbers(answer: str, tool_outputs: list, user_text: str = "") -> list[str]:
-    """Heuristic grounding check: numbers in the answer not traceable to tool data (or the user's message)."""
+    """Heuristic grounding check: numbers in the answer not traceable to tool data (or the user's message).
+
+    Clock times (HH:MM) are checked against the times present in the tool data; calendar dates written
+    with month names are not treated as metrics.
+    """
     known: set[float] = set()
     _numbers_in(tool_outputs, known)
     _numbers_in(user_text, known)
+    blob = json.dumps(tool_outputs, default=str) + " " + user_text
+    known_times = {f"{int(h):02d}:{m}" for h, m in TIME_RE.findall(blob)}
+    bad_times = [t.group(0) for t in TIME_RE.finditer(answer)
+                 if f"{int(t.group(1)):02d}:{t.group(2)}" not in known_times]
     text = REF_RE.sub(" ", ISO_RE.sub(" ", answer))
+    text = MONTH_DAY_RE.sub(" ", TIME_RE.sub(" ", text))
     bad = []
     for m in NUM_RE.finditer(text):
         raw = m.group(1).replace(",", "")
@@ -435,4 +495,4 @@ def unverified_numbers(answer: str, tool_outputs: list, user_text: str = "") -> 
         tol = 0.5 * 10 ** (-d) + 1e-9
         if not any(abs(k - x) <= tol for k in known):
             bad.append(m.group(1))
-    return sorted(set(bad))[:20]
+    return sorted(set(bad) | set(bad_times))[:20]

@@ -385,3 +385,11 @@ def test_refs_with_brackets_resolve(client, session, run_id, fake):
     paths = [r["path"] for r in msg["refs"]]
     assert paths[0].startswith("intervals.sun.") and paths[0].endswith("[0]")
     assert paths[1:] == ["segments[0]", "comparison[Darkness exposure]"]
+
+
+def test_grounding_check_handles_times_and_dates():
+    from app.chat_tools import unverified_numbers
+    tools = [{"display": {"when": "2027-02-14 19:41 to 2027-02-14 21:11 UTC", "darkness": "7.4 h"}}]
+    ok = "Darkness of 7.4 h from 19:41 to 21:11 UTC on 14 February 2027."
+    assert unverified_numbers(ok, tools) == []
+    assert unverified_numbers("It ends at 22:05 after 9.9 h.", tools) == ["22:05", "9.9"]

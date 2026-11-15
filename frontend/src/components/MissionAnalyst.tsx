@@ -31,37 +31,33 @@ const TOOL_LABEL: Record<string, string> = {
 const shortRun = (id: string | null) => (id ? `·${id.slice(-6)}` : "none");
 
 function RefList({ refs, onRef }: { refs: ChatRef[]; onRef: (r: ChatRef) => void }) {
+  const [open, setOpen] = useState(false);
   if (!refs.length) return null;
-  const computed = refs.filter((r) => r.type === "computed");
-  const sources = refs.filter((r) => r.type !== "computed");
-  const chip = (r: ChatRef) => (
-    <li key={r.n}>
-      <button
-        type="button"
-        onClick={() => onRef(r)}
-        className={`max-w-full truncate rounded border px-1.5 py-0.5 text-left text-[10.5px] ${
-          r.type === "computed" ? "border-accent/30 text-accent hover:bg-accent/10" : "border-earth/30 text-earth hover:bg-earth/10"
-        }`}
-        title={r.excerpt ?? r.label}
-      >
-        <span className="mr-1 font-mono">{r.n}</span>
-        {r.label}
-      </button>
-    </li>
-  );
+  const computed = refs.filter((r) => r.type === "computed").length;
+  const docs = refs.length - computed;
+  const summary = [computed ? `${computed} computed` : "", docs ? `${docs} source${docs > 1 ? "s" : ""}` : ""].filter(Boolean).join(" · ");
   return (
-    <div className="mt-2 space-y-1">
-      {computed.length > 0 && (
-        <div>
-          <p className="text-[9.5px] uppercase tracking-wider text-faint">Computed results</p>
-          <ul className="flex flex-wrap gap-1">{computed.map(chip)}</ul>
-        </div>
-      )}
-      {sources.length > 0 && (
-        <div>
-          <p className="text-[9.5px] uppercase tracking-wider text-faint">Documentation &amp; sources</p>
-          <ul className="flex flex-wrap gap-1">{sources.map(chip)}</ul>
-        </div>
+    <div className="mt-1.5">
+      <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="text-[10.5px] text-faint hover:text-muted">
+        {open ? "▾" : "▸"} References ({summary})
+      </button>
+      {open && (
+        <ul className="mt-1 space-y-0.5">
+          {refs.map((r) => (
+            <li key={r.n}>
+              <button
+                type="button"
+                onClick={() => onRef(r)}
+                title={r.excerpt ?? r.label}
+                className={`flex max-w-full items-baseline gap-1.5 text-left text-[10.5px] hover:underline ${r.type === "computed" ? "text-accent" : "text-earth"}`}
+              >
+                <span className="font-mono">[{r.n}]</span>
+                <span className="truncate">{r.label}</span>
+                <span className="shrink-0 text-faint">{r.type === "computed" ? "computed" : "source"}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );
@@ -258,7 +254,7 @@ export default function MissionAnalyst({
               )}
             </div>
           ) : (
-            <div key={m.id}>
+            <div key={m.id} className="border-l-2 border-accent/40 pl-2.5">
               <Markdown text={m.content || "_(no answer)_"} refs={m.refs} onRef={onRef} />
               <RefList refs={m.refs} onRef={onRef} />
               {(m.meta.unverified_numbers?.length ?? 0) > 0 && (
