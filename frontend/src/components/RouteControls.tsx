@@ -221,7 +221,7 @@ export function ScheduleCard({ p, onChange }: { p: PlannerParams; onChange: (p: 
         </select>
         <p className={`mt-0.5 text-[13px] leading-snug ${e.gridMinutes ? "text-danger" : "text-muted"}`}>
           {e.gridMinutes ??
-            "Departures in the graph search fall on this grid. Arrival at a stop is rounded-[2px] up to the next grid time; that alignment wait counts toward the per-stop waiting limit."}
+            "Departures in the graph search fall on this grid. Arrival at a stop is rounded up to the next grid time; that alignment wait counts toward the per-stop waiting limit."}
         </p>
       </div>
     </fieldset>

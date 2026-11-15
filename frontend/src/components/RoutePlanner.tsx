@@ -309,14 +309,14 @@ export default function RoutePlanner({ active }: { active: boolean }) {
 
       <main className="min-w-0 space-y-10 px-6 py-8 xl:px-10">
         <div role="note" className="border border-text bg-field px-3 py-2 text-[14px] text-text">
-          {DISCLAIMER}
+          <b>{DISCLAIMER}</b>
           <span className="block text-[13px] font-normal text-muted">
             Waypoints are hypothetical. Sunlight ≠ power, Earth visibility ≠ communication. Not a certified or globally optimal route.
           </span>
         </div>
         {synthetic && (
           <div role="alert" className="border border-text bg-field px-3 py-1.5 text-[13px] text-text">
-            Synthetic demo mode: Sun/Earth positions come from a crude analytic model. Not SPICE results and not NASA data.
+            <b>Synthetic demo mode.</b> Sun and Earth positions come from a crude analytic model. They are not SPICE results and not NASA data.
           </div>
         )}
         {healthError && (
