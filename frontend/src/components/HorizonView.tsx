@@ -97,8 +97,7 @@ function Countdown({ name, ink, c }: { name: string; ink: string; c: NextChange 
 }
 
 /** Current elevation as a large figure; grey with "below horizon" when the body is down. */
-function BigElevation({ name, ink, el, az }: { name: string; ink: string; el: number; az: number }) {
-  const up = el > 0;
+function BigElevation({ name, ink, el, az, up }: { name: string; ink: string; el: number; az: number; up: boolean }) {
   return (
     <p className="flex flex-wrap items-baseline gap-x-2">
       <span className="text-[24px] leading-[30px] font-bold whitespace-nowrap tabular-nums" style={{ color: up ? ink : MUTED }}>
@@ -106,7 +105,7 @@ function BigElevation({ name, ink, el, az }: { name: string; ink: string; el: nu
         {Math.abs(el).toFixed(1)}°
       </span>
       <span className="text-[13px] whitespace-nowrap text-muted tabular-nums">
-        {up ? "" : "below horizon, "}toward {az.toFixed(0)}° {compass(az)}
+        {up ? "" : el > 0 ? "hidden by terrain, " : "below horizon, "}toward {az.toFixed(0)}° {compass(az)}
       </span>
     </p>
   );
@@ -114,8 +113,10 @@ function BigElevation({ name, ink, el, az }: { name: string; ink: string; el: nu
 
 export default function HorizonView({ site, letter, index, timeUtc, windowEndUtc }: Props) {
   const i = Math.min(index, site.sun.az_deg.length - 1);
-  const sun = { az: site.sun.az_deg[i], el: site.sun.el_deg[i] };
-  const earth = { az: site.earth.az_deg[i], el: site.earth.el_deg[i] };
+  // "up" comes from the backend's masks: above the terrain skyline at terrain sites, above 0 deg elsewhere.
+  const sun = { az: site.sun.az_deg[i], el: site.sun.el_deg[i], up: site.masks.sun[i] };
+  const earth = { az: site.earth.az_deg[i], el: site.earth.el_deg[i], up: site.masks.earth[i] };
+  const hz = site.horizon;
 
   const sunNext = nextChange(site.intervals.sun, timeUtc, windowEndUtc);
   const earthNext = nextChange(site.intervals.earth, timeUtc, windowEndUtc);
@@ -130,9 +131,31 @@ export default function HorizonView({ site, letter, index, timeUtc, windowEndUtc
     [site],
   );
 
-  const body = (b: { az: number; el: number }, fill: string, ink: string, label: string) => {
+  // Terrain skyline: a dark band in the sky plot (only where the skyline is above 0 deg), and a filled
+  // shape in the near-horizon strip from the bottom up to the skyline (clipped to +/-10 deg).
+  const { skyBand, stripSky } = useMemo(() => {
+    if (!hz) return { skyBand: null, stripSky: null };
+    let ring = "";
+    let inner = "";
+    hz.az_deg.forEach((a, k) => {
+      const [ox, oy] = skyXY(a, 0);
+      const [ix, iy] = skyXY(a, Math.max(0, hz.el_deg[k]));
+      ring += `${k ? "L" : "M"}${ox.toFixed(1)} ${oy.toFixed(1)}`;
+      inner += `${k ? "L" : "M"}${ix.toFixed(1)} ${iy.toFixed(1)}`;
+    });
+    let strip = `M0 ${H}`;
+    const pts = hz.az_deg.map((a, k) => [a, hz.el_deg[k]] as const).concat([[360, hz.el_deg[0]]]);
+    for (const [a, e] of pts) {
+      const y = H / 2 - (Math.max(-STRIP_LIM, Math.min(STRIP_LIM, e)) / STRIP_LIM) * (H / 2);
+      strip += `L${((a / 360) * W).toFixed(1)} ${y.toFixed(1)}`;
+    }
+    strip += `L${W} ${H}Z`;
+    return { skyBand: `${ring}Z${inner}Z`, stripSky: strip };
+  }, [hz]);
+
+  const body = (b: { az: number; el: number; up: boolean }, fill: string, ink: string, label: string) => {
     const [x, y] = skyXY(b.az, b.el);
-    const below = b.el <= 0;
+    const below = !b.up;
     const left = x > C + R / 2;
     return (
       <g>
@@ -152,11 +175,11 @@ export default function HorizonView({ site, letter, index, timeUtc, windowEndUtc
     );
   };
 
-  const stripDot = (b: { az: number; el: number }, fill: string, ink: string) => {
+  const stripDot = (b: { az: number; el: number; up: boolean }, fill: string, ink: string) => {
     const x = (b.az / 360) * W;
     const clamped = Math.max(-STRIP_LIM, Math.min(STRIP_LIM, b.el));
     const y = H / 2 - (clamped / STRIP_LIM) * (H / 2);
-    const off = Math.abs(b.el) > STRIP_LIM;
+    const off = Math.abs(b.el) > STRIP_LIM || !b.up;
     return <circle cx={x} cy={y} r={4} fill={off ? "none" : fill} stroke={off ? ink : INK} strokeWidth={1.2} />;
   };
 
@@ -171,7 +194,11 @@ export default function HorizonView({ site, letter, index, timeUtc, windowEndUtc
           <span className="tabular-nums">
             {fmtLat(site.lat_deg)} {fmtLon(site.lon_deg)}
           </span>
-          {Math.abs(site.lat_deg) >= 80 && <span>Smooth-sphere model. Real terrain is not included.</span>}
+          {hz ? (
+            <span>Terrain horizon (LOLA), seen from {hz.observer_height_m} m above the surface.</span>
+          ) : (
+            Math.abs(site.lat_deg) >= 80 && <span>Smooth-sphere model. Real terrain is not included.</span>
+          )}
         </p>
       </header>
       <div className="flex flex-wrap items-start gap-x-5 gap-y-3">
@@ -183,6 +210,7 @@ export default function HorizonView({ site, letter, index, timeUtc, windowEndUtc
           aria-label={`Sky plot. Sun elevation ${sun.el.toFixed(2)} degrees, azimuth ${sun.az.toFixed(1)}. Earth elevation ${earth.el.toFixed(2)} degrees, azimuth ${earth.az.toFixed(1)}.`}
         >
           <circle cx={C} cy={C} r={R} fill={FIELD} stroke={INK} strokeWidth={1.2} />
+          {skyBand && <path d={skyBand} fill={NIGHT} fillOpacity={0.8} fillRule="evenodd" />}
           {[30, 60].map((e) => (
             <circle key={e} cx={C} cy={C} r={(R * (90 - e)) / 90} fill="none" stroke={LINE} strokeWidth={1} />
           ))}
@@ -207,8 +235,8 @@ export default function HorizonView({ site, letter, index, timeUtc, windowEndUtc
         </svg>
         <div className="min-w-0 flex-1 space-y-2">
           <div>
-            <BigElevation name="Sun" ink={SUN_INK} el={sun.el} az={sun.az} />
-            <BigElevation name="Earth" ink={EARTH_INK} el={earth.el} az={earth.az} />
+            <BigElevation name="Sun" ink={SUN_INK} el={sun.el} az={sun.az} up={sun.up} />
+            <BigElevation name="Earth" ink={EARTH_INK} el={earth.el} az={earth.az} up={earth.up} />
           </div>
           <div aria-live="off">
             <Countdown name="Sun" ink={SUN_INK} c={sunNext} />
@@ -218,7 +246,7 @@ export default function HorizonView({ site, letter, index, timeUtc, windowEndUtc
             <p className="mb-1 text-[12px] text-muted">Within 10° of the horizon, by compass direction</p>
             <svg width={W} height={H + TICK_H} viewBox={`0 0 ${W} ${H + TICK_H}`} role="img" aria-label="Elevation near the horizon versus azimuth">
               <rect x={0} y={0} width={W} height={H / 2} fill={FIELD} />
-              <rect x={0} y={H / 2} width={W} height={H / 2} fill={NIGHT} />
+              {stripSky ? <path d={stripSky} fill={NIGHT} /> : <rect x={0} y={H / 2} width={W} height={H / 2} fill={NIGHT} />}
               {[90, 180, 270].map((a) => (
                 <line key={a} x1={(a / 360) * W} y1={0} x2={(a / 360) * W} y2={H} stroke={LINE} strokeOpacity={0.6} />
               ))}

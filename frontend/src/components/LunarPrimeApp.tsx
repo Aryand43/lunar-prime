@@ -26,6 +26,12 @@ function presetDraft(key: string): SiteDraft {
   return { presetKey: p.key, label: p.label, lat: String(p.lat), lon: String(p.lon) };
 }
 
+/** Terrain skyline key for a site that still sits exactly on a terrain preset. */
+function horizonKey(s: SiteDraft): string | undefined {
+  const p = PRESETS.find((x) => x.key === s.presetKey);
+  return p?.terrain && Number(s.lat) === p.lat && Number(s.lon) === p.lon ? p.key : undefined;
+}
+
 function buildRequest(sites: SiteDraft[], w: WindowDraft): CompareRequest {
   return {
     sites: sites.map((s, i) => ({
@@ -34,6 +40,7 @@ function buildRequest(sites: SiteDraft[], w: WindowDraft): CompareRequest {
       lat_deg: Number(s.lat),
       lon_deg: Number(s.lon),
       ...(i === 1 && w.startB !== null ? { start_utc: `${w.startB}:00Z` } : {}),
+      ...(horizonKey(s) ? { horizon_key: horizonKey(s) } : {}),
     })) as CompareRequest["sites"],
     start_utc: `${w.start}:00Z`,
     duration_hours: Number(w.durationDays) * 24,

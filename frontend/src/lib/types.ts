@@ -9,6 +9,8 @@ export interface SiteInput {
   lon_deg: number;
   /** This scenario's start (ISO 8601 UTC). Omitted means the request's start_utc. */
   start_utc?: string;
+  /** Preset key of a precomputed terrain skyline (used only while the coordinates match the preset). */
+  horizon_key?: string;
 }
 
 export interface CompareRequest {
@@ -68,6 +70,15 @@ export interface SubPoints {
   earth_distance_km: number[];
 }
 
+export interface HorizonOut {
+  az_deg: number[];
+  /** Skyline elevation angle (deg) above the local horizontal. */
+  el_deg: number[];
+  site_height_m: number;
+  observer_height_m: number;
+  source: string;
+}
+
 export interface SiteResult {
   id: string;
   label: string;
@@ -83,6 +94,8 @@ export interface SiteResult {
   start_utc: string;
   timestamps_utc: string[];
   subpoints: SubPoints;
+  model: "terrain" | "sphere";
+  horizon: HorizonOut | null;
 }
 
 export interface Statement {

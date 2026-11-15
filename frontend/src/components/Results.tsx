@@ -104,7 +104,7 @@ export function MetricsTable({ result, explain = false }: { result: CompareRespo
                 <span className="mr-1.5 font-bold text-text">{k === 0 ? "A" : "B"}</span>
                 {s.label}
                 {result.metadata.starts_differ && <div className="text-text tabular-nums">from {fmtUtc(s.start_utc).slice(0, 16)} UTC</div>}
-                {Math.abs(s.lat_deg) >= 80 && <div className="text-[12px] text-muted">smooth sphere</div>}
+                <div className="text-[12px] text-muted">{s.model === "terrain" ? "terrain" : "smooth sphere"}</div>
               </th>
             ))}
           </tr>
@@ -168,6 +168,15 @@ export function Headline({ result }: { result: CompareResponse }) {
   return <p className="max-w-[980px] text-[28px] leading-[34px] font-bold">{result.comparison.headline}</p>;
 }
 
+/** The limits line under the findings: mention the smooth sphere only if a site uses it. */
+function modelNote(result: CompareResponse): string {
+  const n = result.sites.filter((s) => s.model === "terrain").length;
+  if (n === 0) return "Geometric model on a smooth sphere: no terrain, body centres only. See Method and limitations below.";
+  if (n === result.sites.length)
+    return "Both sites use a terrain horizon from LOLA maps. Visibility is judged by the centre of the Sun and of Earth. See Method and limitations below.";
+  return "One site uses a terrain horizon from LOLA maps; the other uses a smooth sphere. Visibility is judged by the centre of the Sun and of Earth. See Method and limitations below.";
+}
+
 export function Findings({ result }: { result: CompareResponse }) {
   const st = result.comparison.statements;
   const groups: [Statement["kind"], string][] = [
@@ -194,9 +203,7 @@ export function Findings({ result }: { result: CompareResponse }) {
           </div>
         );
       })}
-      <p className="border-t border-line pt-4 text-[13px] leading-[18px] text-muted">
-        Geometric model on a smooth sphere: no terrain, body centres only. See Method and limitations below.
-      </p>
+      <p className="border-t border-line pt-4 text-[13px] leading-[18px] text-muted">{modelNote(result)}</p>
     </div>
   );
 }
@@ -214,6 +221,7 @@ export function MethodsPanel({ result }: { result: CompareResponse }) {
     ["Visibility", conv.visibility],
     ["Time", conv.time],
     ["Libration", conv.libration],
+    ["Terrain", `${conv.terrain} Maps: LOLA LDEM_80S_80MPP_ADJ.TIF and LDEM_60S_240MPP_ADJ.TIF (NASA GSFC PGDA product 90, Barker et al. 2023). The maps use the DE421 realisation of MOON_ME and Lunar Prime uses DE440; the difference is a few metres.`],
   ];
   return (
     <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">

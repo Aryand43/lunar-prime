@@ -7,6 +7,8 @@ export interface SitePreset {
   lon: number;
   note: string;
   group: PresetGroup;
+  /** True when backend/data/horizons/<key>.json holds a LOLA terrain skyline for this preset. */
+  terrain?: boolean;
 }
 
 export const PRESET_GROUPS: PresetGroup[] = ["South pole", "Elsewhere on the Moon"];
@@ -20,7 +22,7 @@ export const PRESETS: SitePreset[] = [
   {
     // LROC featured image 1408 "IM-2 Athena Seen Obliquely": 84.7906°S, 29.1957°E (where it came to rest).
     // LROC image 1401 gives the intended site as -84.78, 29.13.
-    key: "im2",
+    key: "im2", terrain: true,
     label: "IM-2 Athena, Mons Mouton",
     lat: -84.7906,
     lon: 29.1957,
@@ -29,7 +31,7 @@ export const PRESETS: SitePreset[] = [
   },
   {
     // LROC featured image 1247 "Traversing the Shackleton de Gerlache Ridge": 89.684°S, 196.739°E (= -163.261°E).
-    key: "shackleton-rim",
+    key: "shackleton-rim", terrain: true,
     label: "Shackleton rim, ridge junction",
     lat: -89.684,
     lon: -163.261,
@@ -40,7 +42,7 @@ export const PRESETS: SitePreset[] = [
     // Gläser et al. 2017 (Planetary and Space Science 162, 170-178), point C, as tabulated on Wikipedia
     // "Peak of eternal light": 88.71°S, 68.7°W. Checked against that table only; the paper itself was not
     // accessible when this was written. Re-check against the paper before relying on it.
-    key: "degerlache-ridge",
+    key: "degerlache-ridge", terrain: true,
     label: "de Gerlache ridge, sunlit point",
     lat: -88.71,
     lon: -68.7,
@@ -49,7 +51,7 @@ export const PRESETS: SitePreset[] = [
   },
   {
     // NASA "NASA's LRO Images Intuitive Machines' Odysseus Lander" (Feb 2024): 80.13°S, 1.44°E.
-    key: "im1",
+    key: "im1", terrain: true,
     label: "IM-1 Odysseus, Malapert A",
     lat: -80.13,
     lon: 1.44,
@@ -58,7 +60,7 @@ export const PRESETS: SitePreset[] = [
   },
   {
     // USGS Gazetteer of Planetary Nomenclature, "Statio Shiv Shakti": 69.373°S, 32.319°E.
-    key: "chandrayaan3",
+    key: "chandrayaan3", terrain: true,
     label: "Chandrayaan-3, Shiv Shakti",
     lat: -69.373,
     lon: 32.319,
@@ -66,7 +68,7 @@ export const PRESETS: SitePreset[] = [
     group: "South pole",
   },
   {
-    key: "shackleton",
+    key: "shackleton", terrain: true,
     label: "Shackleton crater floor",
     lat: -89.67,
     lon: 129.78,
