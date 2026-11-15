@@ -70,6 +70,10 @@ CONVENTIONS = {
         "terrain-free local horizon."
     ),
     "time": "Inputs and outputs are UTC; internal computations use TDB (SPICE ephemeris time) via naif0012.tls.",
+    "libration": (
+        "Included. Earth's apparent motion in the lunar sky comes from the DE440 lunar orientation and orbit, "
+        "so Earth rises and sets at sites near the limb and poles."
+    ),
 }
 
 LIMITATIONS = [

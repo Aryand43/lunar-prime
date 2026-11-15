@@ -185,6 +185,7 @@ export function MethodsPanel({ result }: { result: CompareResponse }) {
     ["Azimuth and elevation", conv.angles],
     ["Visibility", conv.visibility],
     ["Time", conv.time],
+    ["Libration", conv.libration],
   ];
   return (
     <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
