@@ -16,7 +16,7 @@ import Timelines from "./Timelines";
 
 const MoonGlobe = dynamic(() => import("./MoonGlobe"), {
   ssr: false,
-  loading: () => <div className="flex h-full items-center justify-center text-[13px] text-muted">Loading 3D globe…</div>,
+  loading: () => <div className="flex h-full items-center justify-center bg-black text-[13px] text-[#D9DAD8]">Loading 3D globe…</div>,
 });
 
 const LETTERS = ["A", "B"] as const;

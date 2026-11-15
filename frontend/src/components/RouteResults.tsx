@@ -5,7 +5,7 @@ import { useMemo } from "react";
 
 import { fmtDuration, fmtUtc, plotlyTime } from "@/lib/format";
 import type { ComparisonRow, RoutePlan, RouteResponse } from "@/lib/routeTypes";
-import { INK } from "@/lib/theme";
+import { EARTH_INK, FIELD, FONT, INK, LINE, MUTED, NIGHT, SUN_INK } from "@/lib/theme";
 import PlotlyChart from "./PlotlyChart";
 
 const short = (iso: string | null) => (iso ? fmtUtc(iso).slice(5, 16) : "—");
@@ -208,7 +208,7 @@ export function TrajectoryChart({ plan, index, onSelectTime }: { plan: RoutePlan
   const x = useMemo(() => tr.time_utc.map(plotlyTime), [tr]);
   const { data, layout, cursor } = useMemo(() => {
     const line = (y: number[], name: string, color: string): Data => ({
-      type: "scatter", mode: "lines", x, y, name, line: { color, width: 1.5 },
+      type: "scatter", mode: "lines", x, y, name, line: { color, width: 1.8 },
       hovertemplate: `${name}: %{y:.2f}°<extra></extra>`,
     });
     const shapes: Partial<Shape>[] = [];
@@ -218,25 +218,26 @@ export function TrajectoryChart({ plan, index, onSelectTime }: { plan: RoutePlan
       if (tr.status[i] === "wait") {
         let j = i;
         while (j + 1 < tr.status.length && tr.status[j + 1] === "wait") j++;
-        shapes.push({ type: "rect", xref: "x", yref: "paper", x0: x[Math.max(0, i - 1)], x1: x[j], y0: 0, y1: 1, fillcolor: "#ffffff", opacity: 0.05, line: { width: 0 }, layer: "below" });
+        shapes.push({ type: "rect", xref: "x", yref: "paper", x0: x[Math.max(0, i - 1)], x1: x[j], y0: 0, y1: 1, fillcolor: NIGHT, opacity: 0.08, line: { width: 0 }, layer: "below" });
         i = j + 1;
       } else i++;
     }
-    shapes.push({ type: "line", xref: "paper", x0: 0, x1: 1, yref: "y", y0: 0, y1: 0, line: { color: "#5d636c", width: 1, dash: "dot" } });
+    shapes.push({ type: "line", xref: "paper", x0: 0, x1: 1, yref: "y", y0: 0, y1: 0, line: { color: MUTED, width: 1, dash: "dash" } });
     const cursor = shapes.length;
     shapes.push({ type: "line", xref: "x", yref: "paper", x0: x[0], x1: x[0], y0: 0, y1: 1, line: { color: INK, width: 2 } });
-    const ax = { gridcolor: "#1b1e23", zerolinecolor: "#1b1e23", linecolor: "#22262d", tickfont: { size: 10, color: "#8b919b" } };
+    const ax = { gridcolor: LINE, zerolinecolor: LINE, linecolor: LINE, tickfont: { size: 12, color: MUTED, family: FONT } };
+    const title = (text: string) => ({ text, font: { size: 13, color: INK, family: FONT } });
     const layout: Partial<Layout> = {
       autosize: true, height: 260, margin: { l: 52, r: 12, t: 10, b: 34 },
       paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
-      font: { color: "#8b919b", size: 11 }, hovermode: "x unified",
-      hoverlabel: { bgcolor: "#14171b", bordercolor: "#2f343c", font: { color: "#e4e6ea", size: 11 } },
-      showlegend: true, legend: { orientation: "h", x: 0, y: 1.12, font: { size: 11 } },
-      xaxis: { ...ax, type: "date", title: { text: "UTC", font: { size: 10, color: "#8b919b" } } },
-      yaxis: { ...ax, title: { text: "Elevation along track (°)", font: { size: 10, color: "#8b919b" } } },
+      font: { color: MUTED, size: 12, family: FONT }, hovermode: "x unified",
+      hoverlabel: { bgcolor: FIELD, bordercolor: LINE, font: { color: INK, size: 13, family: FONT } },
+      showlegend: true, legend: { orientation: "h", x: 0, y: 1.14, font: { size: 13, color: INK, family: FONT } },
+      xaxis: { ...ax, type: "date", title: title("UTC") },
+      yaxis: { ...ax, title: title("Elevation along track (°)") },
       shapes: shapes as Layout["shapes"],
     };
-    return { data: [line(tr.sun_el_deg, "Sun", "#f2b84b"), line(tr.earth_el_deg, "Earth", "#6b9cff")], layout, cursor };
+    return { data: [line(tr.sun_el_deg, "Sun", SUN_INK), line(tr.earth_el_deg, "Earth", EARTH_INK)], layout, cursor };
   }, [tr, x]);
   const relayout = useMemo(() => ({ [`shapes[${cursor}].x0`]: x[index], [`shapes[${cursor}].x1`]: x[index] }), [cursor, x, index]);
   return (

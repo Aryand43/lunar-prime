@@ -5,22 +5,17 @@ import { useMemo } from "react";
 
 import { plotlyTime } from "@/lib/format";
 import type { CompareResponse, Lane } from "@/lib/types";
-import { INK } from "@/lib/theme";
+import { EARTH, EARTH_INK, FIELD, FONT, INK, LINE, MUTED, NIGHT, SUN, SUN_INK } from "@/lib/theme";
 import PlotlyChart from "./PlotlyChart";
 
-const SUN = "#f2b84b";
-const EARTH = "#6b9cff";
-const BOTH = "#d4d7dc";
-const GRID = "#1b1e23";
-const AXIS = "#8b919b";
 
 const LANES: { site: 0 | 1; lane: Lane; label: string; color: string }[] = [
-  { site: 0, lane: "sun", label: "A · Sun", color: SUN },
-  { site: 0, lane: "earth", label: "A · Earth", color: EARTH },
-  { site: 0, lane: "both", label: "A · Both", color: BOTH },
-  { site: 1, lane: "sun", label: "B · Sun", color: SUN },
-  { site: 1, lane: "earth", label: "B · Earth", color: EARTH },
-  { site: 1, lane: "both", label: "B · Both", color: BOTH },
+  { site: 0, lane: "sun", label: "A Sun", color: SUN },
+  { site: 0, lane: "earth", label: "A Earth", color: EARTH },
+  { site: 0, lane: "both", label: "A Both", color: INK },
+  { site: 1, lane: "sun", label: "B Sun", color: SUN },
+  { site: 1, lane: "earth", label: "B Earth", color: EARTH },
+  { site: 1, lane: "both", label: "B Both", color: INK },
 ];
 
 interface Props {
@@ -42,15 +37,15 @@ export default function Timelines({ result, index, onSelectTime }: Props) {
       name,
       xaxis: "x",
       yaxis: axis,
-      line: { color, width: 1.4, dash: dash as "solid" | undefined },
+      line: { color, width: 1.8, dash: dash as "solid" | undefined },
       hovertemplate: `${name}: %{y:.2f}°<extra></extra>`,
       showlegend: false,
     });
     const traces: Data[] = [
-      line(a.sun.el_deg, "Sun elevation", SUN, "y"),
-      line(a.earth.el_deg, "Earth elevation", EARTH, "y"),
-      line(b.sun.el_deg, "Sun elevation", SUN, "y2"),
-      line(b.earth.el_deg, "Earth elevation", EARTH, "y2"),
+      line(a.sun.el_deg, "Sun elevation", SUN_INK, "y"),
+      line(a.earth.el_deg, "Earth elevation", EARTH_INK, "y"),
+      line(b.sun.el_deg, "Sun elevation", SUN_INK, "y2"),
+      line(b.earth.el_deg, "Earth elevation", EARTH_INK, "y2"),
       // Invisible trace so the lane panel participates in hover/click.
       {
         type: "scatter",
@@ -65,12 +60,25 @@ export default function Timelines({ result, index, onSelectTime }: Props) {
     ];
 
     const shapes: Partial<Shape>[] = [];
+    // Below-horizon band in each elevation subplot (from the data minimum up to 0°, so the axis range is unchanged)
+    ([["y", a], ["y2", b]] as const).forEach(([yref, s]) => {
+      const lo = Math.min(Math.min(...s.sun.el_deg), Math.min(...s.earth.el_deg));
+      if (lo < 0) {
+        shapes.push({ type: "rect", xref: "paper", x0: 0, x1: 1, yref, y0: lo, y1: 0, fillcolor: NIGHT, opacity: 0.1, line: { width: 0 }, layer: "below" });
+      }
+    });
     // Ideal horizon (elevation = 0) reference lines
     for (const yref of ["y", "y2"] as const) {
-      shapes.push({ type: "line", xref: "paper", x0: 0, x1: 1, yref, y0: 0, y1: 0, line: { color: "#5d636c", width: 1, dash: "dot" } });
+      shapes.push({ type: "line", xref: "paper", x0: 0, x1: 1, yref, y0: 0, y1: 0, line: { color: MUTED, width: 1, dash: "dash" } });
     }
     LANES.forEach((l, k) => {
       const yc = LANES.length - 1 - k;
+      // Dark "not visible" track behind the Sun and Earth lanes; the "Both" lane gets a thin outline instead.
+      shapes.push(
+        l.lane === "both"
+          ? { type: "rect", xref: "paper", x0: 0, x1: 1, yref: "y3", y0: yc - 0.32, y1: yc + 0.32, fillcolor: "rgba(0,0,0,0)", line: { color: LINE, width: 1 }, layer: "below" }
+          : { type: "rect", xref: "paper", x0: 0, x1: 1, yref: "y3", y0: yc - 0.32, y1: yc + 0.32, fillcolor: NIGHT, line: { width: 0 }, layer: "below" },
+      );
       for (const iv of result.sites[l.site].intervals[l.lane]) {
         shapes.push({
           type: "rect",
@@ -81,7 +89,7 @@ export default function Timelines({ result, index, onSelectTime }: Props) {
           y0: yc - 0.32,
           y1: yc + 0.32,
           fillcolor: l.color,
-          opacity: l.lane === "both" ? 0.75 : 0.85,
+          opacity: 1,
           line: { width: 0 },
           layer: "above",
         });
@@ -94,22 +102,27 @@ export default function Timelines({ result, index, onSelectTime }: Props) {
     });
 
     const axisStyle = {
-      gridcolor: GRID, zerolinecolor: GRID, linecolor: "#22262d", tickcolor: "#22262d",
-      tickfont: { size: 10, color: AXIS }, titlefont: { size: 10, color: AXIS },
+      gridcolor: LINE, zerolinecolor: LINE, linecolor: LINE, tickcolor: LINE,
+      tickfont: { size: 12, color: MUTED, family: FONT },
     };
+    const title = (text: string) => ({ text, font: { size: 13, color: INK, family: FONT } });
+    const note = (text: string, y: number) => ({
+      text, xref: "paper" as const, yref: "paper" as const, x: 0, y, yanchor: "bottom" as const, xanchor: "left" as const, showarrow: false,
+      font: { size: 13, color: INK, family: FONT },
+    });
     const layout: Partial<Layout> = {
       autosize: true,
       height: 470,
-      margin: { l: 64, r: 12, t: 26, b: 34 },
+      margin: { l: 78, r: 12, t: 28, b: 40 },
       paper_bgcolor: "rgba(0,0,0,0)",
       plot_bgcolor: "rgba(0,0,0,0)",
-      font: { family: "var(--font-geist-sans), system-ui, sans-serif", color: AXIS, size: 11 },
+      font: { family: FONT, color: MUTED, size: 12 },
       hovermode: "x unified",
-      hoverlabel: { bgcolor: "#14171b", bordercolor: "#2f343c", font: { color: "#e4e6ea", size: 11 } },
+      hoverlabel: { bgcolor: FIELD, bordercolor: LINE, font: { color: INK, size: 13, family: FONT } },
       dragmode: "zoom",
-      xaxis: { ...axisStyle, type: "date", anchor: "y3", title: { text: "UTC", font: { size: 10, color: AXIS } }, showspikes: true, spikecolor: "#5d636c", spikethickness: 1, spikemode: "across" },
-      yaxis: { ...axisStyle, domain: [0.66, 1], title: { text: "A elev. (°)", font: { size: 10, color: AXIS } } },
-      yaxis2: { ...axisStyle, domain: [0.33, 0.62], title: { text: "B elev. (°)", font: { size: 10, color: AXIS } } },
+      xaxis: { ...axisStyle, type: "date", anchor: "y3", title: title("UTC"), showspikes: true, spikecolor: MUTED, spikethickness: 1, spikemode: "across" },
+      yaxis: { ...axisStyle, domain: [0.66, 1], title: title("A elevation (°)") },
+      yaxis2: { ...axisStyle, domain: [0.33, 0.62], title: title("B elevation (°)") },
       yaxis3: {
         ...axisStyle,
         domain: [0, 0.29],
@@ -123,9 +136,9 @@ export default function Timelines({ result, index, onSelectTime }: Props) {
       },
       shapes: shapes as Layout["shapes"],
       annotations: [
-        { text: `Site A · ${a.label}`, xref: "paper", yref: "paper", x: 0, y: 1.0, yanchor: "bottom", xanchor: "left", showarrow: false, font: { size: 11, color: "#e4e6ea" } },
-        { text: `Site B · ${b.label}`, xref: "paper", yref: "paper", x: 0, y: 0.62, yanchor: "bottom", xanchor: "left", showarrow: false, font: { size: 11, color: "#e4e6ea" } },
-        { text: "Visibility intervals (refined)", xref: "paper", yref: "paper", x: 0, y: 0.29, yanchor: "bottom", xanchor: "left", showarrow: false, font: { size: 11, color: "#e4e6ea" } },
+        note(`A ${a.label}`, 1.0),
+        note(`B ${b.label}`, 0.62),
+        note("Visibility intervals (refined)", 0.29),
       ],
     };
     return { data: traces, layout, cursorShapeIndex };

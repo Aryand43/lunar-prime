@@ -16,7 +16,7 @@ import { ComparisonTable, Itinerary, LegTable, RouteMethod, RouteSummary, Trajec
 
 const MoonGlobe = dynamic(() => import("./MoonGlobe"), {
   ssr: false,
-  loading: () => <div className="flex h-full items-center justify-center text-[13px] text-muted">Loading 3D globe…</div>,
+  loading: () => <div className="flex h-full items-center justify-center bg-black text-[13px] text-[#D9DAD8]">Loading 3D globe…</div>,
 });
 
 const DISCLAIMER =
@@ -248,9 +248,9 @@ export default function RoutePlanner({ active }: { active: boolean }) {
   pushMarker(start, "start", "S");
   wps.forEach((w) => {
     const order = resultFresh ? visited.indexOf(w.id) : -1;
-    pushMarker(w, order > 0 ? "visited" : "candidate", order > 0 ? String(order) : "·");
+    pushMarker(w, order > 0 ? "visited" : "candidate", order > 0 ? String(order) : "");
   });
-  pushMarker(dest, "destination", "◎");
+  pushMarker(dest, "destination", "End");
 
   const basePos = useMemo(() => new Map((res?.bases ?? []).map((b) => [b.id, [b.lat_deg, b.lon_deg] as [number, number]])), [res]);
   const paths: GlobePath[] = useMemo(() => {
@@ -263,10 +263,10 @@ export default function RoutePlanner({ active }: { active: boolean }) {
         const k = [l.from_id, l.to_id].sort().join("|");
         if (seen.has(k)) return;
         seen.add(k);
-        out.push({ key: `net-${k}`, points: greatCircleArc(basePos.get(l.from_id)!, basePos.get(l.to_id)!, 1.0012, 24), color: "#8b919b", opacity: 0.25 });
+        out.push({ key: `net-${k}`, points: greatCircleArc(basePos.get(l.from_id)!, basePos.get(l.to_id)!, 1.0012, 24), color: "#9AA3AD", opacity: 0.3 });
       });
     }
-    if (showBaseline && res.baseline.plan) out.push({ key: "baseline", points: arcs(res.baseline.plan.visited, 1.0018), color: "#d4d7dc", dashed: true, opacity: 0.85 });
+    if (showBaseline && res.baseline.plan) out.push({ key: "baseline", points: arcs(res.baseline.plan.visited, 1.0018), color: "#9AA3AD", dashed: true, opacity: 0.95 });
     if (res.route) out.push({ key: "route", points: arcs(res.route.visited, 1.0024), color: "#FFFFFF" });
     return out;
   }, [res, basePos, showBaseline, showNetwork]);
@@ -344,7 +344,7 @@ export default function RoutePlanner({ active }: { active: boolean }) {
         )}
 
         <div className="grid grid-cols-1 gap-3 2xl:grid-cols-[minmax(0,1fr)_380px]">
-          <div className="relative h-[440px] overflow-hidden sm:h-[560px]">
+          <div className="relative h-[440px] overflow-hidden bg-space sm:h-[560px]">
             <MoonGlobe
               sites={markers}
               subsolar={subsolar}
@@ -366,30 +366,29 @@ export default function RoutePlanner({ active }: { active: boolean }) {
                     ["south", "South hemisphere"],
                   ] as [GlobeView, string][]
                 ).map(([v, label]) => (
-                  <button key={v} type="button" onClick={() => setView((x) => ({ name: v, nonce: x.nonce + 1 }))} className="rounded-[2px] border border-line bg-black/60 px-2 py-0.5 text-[13px] text-muted hover:text-text">
+                  <button key={v} type="button" onClick={() => setView((x) => ({ name: v, nonce: x.nonce + 1 }))} className={`rounded-[2px] border px-2.5 py-1 text-[13px] ${view.name === v ? "border-white bg-white text-black" : "border-[#55585c] bg-black/60 text-[#D9DAD8] hover:border-white"}`}>
                     {label}
                   </button>
                 ))}
-                <label className="flex items-center gap-1 rounded-[2px] border border-line bg-black/60 px-2 py-0.5 text-[13px] text-muted">
-                  <input type="checkbox" checked={showBaseline} onChange={(e) => setShowBaseline(e.target.checked)} className="accent-[var(--color-text)]" />
+                <label className="flex items-center gap-1.5 rounded-[2px] border border-[#55585c] bg-black/60 px-2.5 py-1 text-[13px] text-[#D9DAD8]">
+                  <input type="checkbox" checked={showBaseline} onChange={(e) => setShowBaseline(e.target.checked)} className="accent-white" />
                   Baseline (dashed)
                 </label>
-                <label className="flex items-center gap-1 rounded-[2px] border border-line bg-black/60 px-2 py-0.5 text-[13px] text-muted">
-                  <input type="checkbox" checked={showNetwork} onChange={(e) => setShowNetwork(e.target.checked)} className="accent-[var(--color-text)]" />
+                <label className="flex items-center gap-1.5 rounded-[2px] border border-[#55585c] bg-black/60 px-2.5 py-1 text-[13px] text-[#D9DAD8]">
+                  <input type="checkbox" checked={showNetwork} onChange={(e) => setShowNetwork(e.target.checked)} className="accent-white" />
                   Candidate legs
                 </label>
               </div>
               {picking && (
-                <span className="rounded-[2px] border border-white/60 bg-black/70 px-2 py-0.5 text-[13px] text-text font-bold">Click the surface to place · Esc to cancel</span>
+                <span className="rounded-[2px] border border-white bg-black/70 px-2 py-1 text-[13px] font-bold text-white">Click the Moon to place it. Press Esc to cancel.</span>
               )}
             </div>
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 space-y-0.5 p-2.5 text-[13px] leading-snug text-muted">
-              <div className="flex flex-wrap gap-x-3">
-                <span><span className="text-text font-bold">━</span> optimized</span>
-                <span><span className="text-text">╍</span> shortest-distance baseline</span>
-                <span><span className="text-muted">─</span> candidate legs ≤ max leg</span>
-                <span><span className="text-sun-ink">●</span> traverse position</span>
-                <span><span className="text-danger">◎</span> destination</span>
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 space-y-1 p-3 text-[13px] leading-[18px] text-[#D9DAD8]">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                <span className="flex items-center gap-1.5"><span className="h-0.5 w-4 bg-white" /> Optimized route</span>
+                <span className="flex items-center gap-1.5"><span className="w-4 border-t-2 border-dashed border-[#9AA3AD]" /> Shortest-distance baseline</span>
+                <span className="flex items-center gap-1.5"><span className="h-px w-4 bg-[#9AA3AD] opacity-60" /> Candidate legs within the maximum leg length</span>
+                <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-white" /> Rover position</span>
               </div>
               <div>
                 Globe shading is illustrative (lit from the computed subsolar point, with extra ambient light); use the elevation values for analysis.
