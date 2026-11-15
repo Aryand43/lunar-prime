@@ -15,6 +15,9 @@ from spiceypy.utils.exceptions import SpiceyError
 from . import config, kernels
 from .geometry import SpiceProvider, SyntheticProvider
 from .models import CompareRequest, CompareResponse, HealthResponse, KernelOut
+from .routing import RoutingError
+from .routing_models import RouteRequest, RouteResponse
+from .routing_service import build_response
 from .service import ComputeError, run_compare
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -98,6 +101,29 @@ def compare(req: CompareRequest):
         with kernels.SPICE_LOCK:  # CSPICE is not thread-safe
             return run_compare(req, provider)
     except ComputeError as exc:
+        return _error(422, "invalid_request", str(exc))
+    except SpiceyError as exc:
+        log.exception("SPICE error")
+        return _error(500, "spice_error", f"SPICE computation failed: {exc.short or exc}")
+
+
+@app.post("/api/route", response_model=RouteResponse, responses={422: {}, 503: {}})
+def route(req: RouteRequest):
+    """South Pole Route Planner. A valid request with no route returns 200 with status 'infeasible'."""
+    if req.mode == "spice":
+        if not kernels.STATUS.loaded:  # never fall back to synthetic silently
+            return _error(
+                503, "spice_unavailable",
+                (kernels.STATUS.error or "SPICE kernels are not loaded.")
+                + " Synthetic demo mode is available for UI development, but its results are not scientific.",
+            )
+        provider = SpiceProvider()
+    else:
+        provider = SyntheticProvider()
+    try:
+        with kernels.SPICE_LOCK:  # one acquisition; routing code never takes the lock itself
+            return build_response(req, provider)
+    except RoutingError as exc:
         return _error(422, "invalid_request", str(exc))
     except SpiceyError as exc:
         log.exception("SPICE error")

@@ -1,3 +1,4 @@
+import type { RouteRequest, RouteResponse } from "./routeTypes";
 import type { ApiErrorBody, CompareRequest, CompareResponse, HealthResponse } from "./types";
 
 export class ApiError extends Error {
@@ -49,6 +50,22 @@ export async function postCompare(req: CompareRequest, signal?: AbortSignal): Pr
       signal,
     });
     return await parse<CompareResponse>(res);
+  } catch (e) {
+    if (e instanceof ApiError) throw e;
+    if ((e as Error).name === "AbortError") throw e;
+    throw new ApiError("Cannot reach the Lunar Prime backend.", "backend_unreachable", 0);
+  }
+}
+
+export async function postRoute(req: RouteRequest, signal?: AbortSignal): Promise<RouteResponse> {
+  try {
+    const res = await fetch("/api/route", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(req),
+      signal,
+    });
+    return await parse<RouteResponse>(res);
   } catch (e) {
     if (e instanceof ApiError) throw e;
     if ((e as Error).name === "AbortError") throw e;

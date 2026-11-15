@@ -11,6 +11,7 @@ import { SiteCard, WindowCard, siteErrors, windowErrors, type SiteDraft, type Wi
 import HorizonView from "./HorizonView";
 import type { GlobeView } from "./MoonGlobe";
 import { Findings, MethodsPanel, MetricsTable } from "./Results";
+import RoutePlanner from "./RoutePlanner";
 import Scrubber from "./Scrubber";
 import Timelines from "./Timelines";
 
@@ -77,6 +78,8 @@ export default function LunarPrimeApp() {
   const [index, setIndex] = useState(0);
   const [picking, setPicking] = useState<"A" | "B" | null>(null);
   const [view, setView] = useState<{ name: GlobeView; nonce: number }>({ name: "near", nonce: 0 });
+  const [tab, setTab] = useState<"compare" | "route">("compare");
+  const [routeMounted, setRouteMounted] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const autoRan = useRef(false);
 
@@ -174,9 +177,35 @@ export default function LunarPrimeApp() {
       <header className="sticky top-0 z-40 flex h-12 items-center justify-between gap-3 border-b border-line bg-bg/95 px-4 backdrop-blur">
         <div className="flex min-w-0 items-baseline gap-3">
           <h1 className="text-[15px] font-semibold tracking-tight">Lunar Prime</h1>
-          <span className="hidden truncate text-[12px] text-muted md:inline">Lunar site sunlight &amp; direct-to-Earth visibility · geometric, ideal horizon</span>
+          <div role="tablist" aria-label="Mode" className="flex self-center rounded-md border border-line p-0.5">
+            {(
+              [
+                ["compare", "Compare Sites"],
+                ["route", "Route Planner"],
+              ] as const
+            ).map(([t, label]) => (
+              <button
+                key={t}
+                type="button"
+                role="tab"
+                aria-selected={tab === t}
+                onClick={() => {
+                  setTab(t);
+                  if (t === "route") setRouteMounted(true);
+                }}
+                className={`rounded px-2.5 py-0.5 text-[12px] ${tab === t ? "bg-panel-2 text-text" : "text-muted hover:text-text"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <span className="hidden truncate text-[12px] text-muted xl:inline">
+            {tab === "compare"
+              ? "Lunar site sunlight & direct-to-Earth visibility · geometric, ideal horizon"
+              : "Conceptual south-pole routing on a spherical Moon · geometric exposure"}
+          </span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className={`flex items-center gap-3 ${tab === "compare" ? "" : "hidden"}`}>
           {result && (
             <span
               className={`rounded border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider ${
@@ -193,13 +222,13 @@ export default function LunarPrimeApp() {
         </div>
       </header>
 
-      {synthetic && (
+      {synthetic && tab === "compare" && (
         <div role="alert" className="border-b border-sun/40 bg-sun/10 px-4 py-1.5 text-[12px] text-sun">
           Synthetic demo mode: values come from a crude analytic model for UI development. They are not SPICE results and not NASA data.
         </div>
       )}
 
-      <div className="grid flex-1 grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)]">
+      <div className={tab === "compare" ? "grid flex-1 grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)]" : "hidden"}>
         <aside className="space-y-3 border-b border-line p-3 lg:sticky lg:top-12 lg:h-[calc(100vh-3rem)] lg:overflow-y-auto lg:border-r lg:border-b-0">
           {sites.map((s, k) => (
             <SiteCard
@@ -265,7 +294,7 @@ export default function LunarPrimeApp() {
 
           <div className="grid grid-cols-1 gap-3 2xl:grid-cols-[minmax(0,1fr)_340px]">
             <div className="relative h-[420px] overflow-hidden rounded-md border border-line bg-panel sm:h-[520px] 2xl:h-auto 2xl:min-h-[640px]">
-              <MoonGlobe sites={globeSites} subsolar={subsolar} subEarth={subEarth} picking={picking} onPick={onPick} view={view} />
+              <MoonGlobe sites={globeSites} subsolar={subsolar} subEarth={subEarth} picking={picking} onPick={onPick} view={view} active={tab === "compare"} />
               <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-2 p-2.5">
                 <div className="pointer-events-auto flex gap-1" role="group" aria-label="Globe view">
                   {(["near", "far", "south", "north"] as GlobeView[]).map((v) => (
@@ -375,6 +404,11 @@ export default function LunarPrimeApp() {
           </div>
         </main>
       </div>
+      {routeMounted && (
+        <div className={tab === "route" ? "flex flex-1 flex-col" : "hidden"}>
+          <RoutePlanner active={tab === "route"} />
+        </div>
+      )}
       <EscHandler onEsc={() => setPicking(null)} />
     </div>
   );
