@@ -10,13 +10,6 @@ __pycache__/
 
 .DS_Store
 
-# Local persistence (SQLite, Qdrant local mode)
-backend/.data/
-
-# Local secrets (never commit)
-.env
-backend/.env
-
 # Private Node.js downloaded by run-lunar-prime.command
 .tools/
 

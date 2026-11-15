@@ -10,33 +10,7 @@ import os
 from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
-
-
-def _load_dotenv() -> None:
-    """Load KEY=VALUE lines from <repo>/.env and backend/.env without overriding the real environment.
-
-    Minimal parser (no dependency): ignores comments, blank lines and empty values. Disabled with
-    LUNAR_PRIME_NO_DOTENV=1 (the test suite does this so it never sees real credentials).
-    """
-    if os.environ.get("LUNAR_PRIME_NO_DOTENV") == "1":
-        return
-    for path in (BACKEND_DIR.parent / ".env", BACKEND_DIR / ".env"):
-        if not path.is_file():
-            continue
-        for line in path.read_text().splitlines():
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, _, value = line.partition("=")
-            key, value = key.strip().removeprefix("export ").strip(), value.strip().strip("'\"")
-            if key and value and key not in os.environ:
-                os.environ[key] = value
-
-
-_load_dotenv()
 KERNEL_DIR = Path(os.environ.get("LUNAR_PRIME_KERNEL_DIR", BACKEND_DIR / "kernels"))
-# The analytic synthetic provider exists only for the offline test suite. The live API serves SPICE only.
-ALLOW_SYNTHETIC = os.environ.get("LUNAR_PRIME_ALLOW_SYNTHETIC") == "1"
 # Precomputed skylines (scripts/build_horizons.py), one JSON file per preset key. Committed to Git.
 HORIZON_DIR = Path(os.environ.get("LUNAR_PRIME_HORIZON_DIR", BACKEND_DIR / "data" / "horizons"))
 # LOLA elevation maps (scripts/fetch_terrain.sh). Large; not in Git. Only needed to build skylines.
@@ -120,42 +94,4 @@ LIMITATIONS = [
     "Sunlight is geometric solar visibility, not electrical power: no panel orientation, efficiency, dust or thermal effects.",
     "Earth visibility is a line-of-sight condition, not a communication link: no antenna pointing, link budget, ground-station availability or relay assets.",
     "Events shorter than the sampling interval can be missed; detected transitions are refined by bisection to about 1 s.",
-]
-
-# --- Route planner -------------------------------------------------------------
-# Bounds checked BEFORE any ephemeris call or large allocation.
-ROUTE_MAX_BASES = 40  # start + destination + candidate waypoints
-ROUTE_MAX_TIME_STEPS = 3_000  # grid steps over the planning horizon
-ROUTE_MAX_TIME_STATES = 80_000  # bases x (time steps + 1)
-ROUTE_MAX_SAMPLE_EVALS = 25_000_000  # elevation samples across all leg/wait edge evaluations
-ROUTE_MAX_EPHEMERIS_EPOCHS = 20_000  # exact SPICE epochs in the ephemeris table
-ROUTE_MAX_TRAJECTORY_POINTS = 12_000  # returned trajectory samples per route
-ROUTE_MAX_LABELS = 600_000  # labels created by the time-expanded search
-ROUTE_MAX_LOCAL_SEARCH_EVALS = 4_000  # itinerary evaluations in the local-improvement pass
-ROUTE_EPHEMERIS_STEP_MAX_MIN = 10.0  # ephemeris table / along-track sampling step upper bound
-ROUTE_MIN_HORIZON_HOURS = 1.0
-ROUTE_MAX_HORIZON_HOURS = 60 * 24.0
-ROUTE_MIN_SPEED_KMH = 0.01
-ROUTE_MAX_SPEED_KMH = 200.0
-ROUTE_MIN_GRID_MIN = 1.0
-ROUTE_MAX_GRID_MIN = 360.0
-# Legs whose endpoints are within this angle of antipodal have no unique great circle.
-ROUTE_ANTIPODAL_MARGIN_RAD = 1e-3
-ROUTE_MAX_LEG_KM = 0.9 * 3.141592653589793 * MOON_RADIUS_KM  # well short of the antipode
-# Two bases closer than this are the same physical location (catches -90 deg at any longitude).
-ROUTE_COINCIDENT_KM = 1e-3
-
-ROUTE_DISCLAIMER = (
-    "Conceptual spherical-surface route. Terrain, slopes, obstacles, battery/thermal limits, "
-    "and communication link budgets are not modelled."
-)
-ROUTE_LIMITATIONS = [
-    ROUTE_DISCLAIMER,
-    "Travel follows great-circle arcs on a sphere of radius 1737.4 km at constant speed; no rover dynamics, turning or slopes.",
-    "Waypoints are hypothetical candidate locations, not constructed or planned lunar bases.",
-    "Darkness = Sun centre at or below the ideal horizon (elevation <= 0 deg); not an electrical power model.",
-    "Earth-invisible = Earth centre at or below the ideal horizon; Earth visibility is not a communication link.",
-    "No terrain shadowing, finite solar/terrestrial discs, eclipses or relay assets.",
-    "Exposure is integrated with linear interpolation between samples; events shorter than the sampling step can be missed.",
-    "The graph search is exact only over its discrete time grid and candidate network; the result is not a globally optimal continuous route and not a certified safe route.",
 ]

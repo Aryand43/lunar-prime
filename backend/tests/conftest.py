@@ -1,14 +1,3 @@
-import os
-import tempfile
-
-# Isolated persistence for tests; never call a paid provider or read the local .env.
-os.environ["LUNAR_PRIME_NO_DOTENV"] = "1"
-os.environ["LUNAR_PRIME_ALLOW_SYNTHETIC"] = "1"  # fast offline provider, tests only
-os.environ["LUNAR_PRIME_DB_PATH"] = os.path.join(tempfile.mkdtemp(), "test.db")
-os.environ["LUNAR_PRIME_QDRANT_PATH"] = ":memory:"
-for _k in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "LUNAR_PRIME_EMBED_API_KEY", "LUNAR_PRIME_QDRANT_URL"):
-    os.environ.pop(_k, None)
-
 import pytest
 from fastapi.testclient import TestClient
 

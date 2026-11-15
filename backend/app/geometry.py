@@ -131,33 +131,3 @@ class SyntheticProvider:
             lat = np.radians(6.7) * np.sin(2 * np.pi * (t - t_nm) / self.DRACONIC_S)
             r = self.EARTH_KM
         return r * np.column_stack([np.cos(lat) * np.cos(lon), np.cos(lat) * np.sin(lon), np.sin(lat)])
-
-
-
-
-# --- Vectorised helpers (used by the route planner; compare uses the scalar forms above) ---
-
-
-def enu_bases(lat_deg: np.ndarray, lon_deg: np.ndarray) -> np.ndarray:
-    """(M, 3, 3) stack of East/North/Up rows, same convention as enu_basis()."""
-    lat, lon = np.radians(np.asarray(lat_deg, float)), np.radians(np.asarray(lon_deg, float))
-    sl, cl, so, co = np.sin(lat), np.cos(lat), np.sin(lon), np.cos(lon)
-    zero = np.zeros_like(lat)
-    east = np.stack([-so, co, zero], axis=-1)
-    north = np.stack([-sl * co, -sl * so, cl], axis=-1)
-    up = np.stack([cl * co, cl * so, sl], axis=-1)
-    return np.stack([east, north, up], axis=-2)
-
-
-def topocentric_az_el_many(body_km: np.ndarray, site_km: np.ndarray, bases: np.ndarray):
-    """Azimuth/elevation (deg) for bodies seen from many sites at many epochs.
-
-    body_km: (K, M, 3) Moon-centred body vectors; site_km: (M, 3); bases: (M, 3, 3).
-    Identical maths to topocentric_az_el(): subtract the observer, project on E/N/U.
-    """
-    topo = body_km - site_km[None, :, :]
-    enu = np.einsum("kmj,mij->kmi", topo, bases)
-    rng = np.linalg.norm(enu, axis=-1)
-    el = np.degrees(np.arcsin(np.clip(enu[..., 2] / rng, -1.0, 1.0)))
-    az = np.degrees(np.arctan2(enu[..., 0], enu[..., 1])) % 360.0
-    return az, el
