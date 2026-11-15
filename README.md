@@ -3,9 +3,10 @@
 Compare two lunar landing sites by **geometric sunlight** and **direct-to-Earth visibility** over a chosen UTC window. All geometry is computed on the backend with NASA/JPL NAIF SPICE. The comparison sentences are deterministic templates filled from the computed metrics; no language model writes them.
 
 - Pick two sites on a 3D lunar globe (or choose presets, or type coordinates).
-- Choose a UTC start, duration and sampling interval.
-- Scrub through time. The globe is lit from the computed subsolar point, and a local-horizon sky plot shows the Sun and Earth for each site.
-- Compare synchronized elevation timelines and refined visibility intervals, summary metrics, and plain-language findings.
+- Choose a UTC start, duration and sampling interval. Site B can start on its own date, so you can compare one place on two dates.
+- Scrub through time. The globe is lit from the computed subsolar point, and a local-horizon sky plot shows the Sun and Earth for each site, with their current elevations and how long until each one next sets or rises.
+- Read the answer first: a two-sentence headline, findings and a metrics table. An "Explain" switch adds a plain sentence under each number.
+- Compare synchronized elevation timelines and refined visibility intervals, and list every sunlight and Earth-contact window.
 - Read the method, limitations, kernel provenance (with SHA-256), and export the full result as JSON.
 - **Route Planner tab:** plan a conceptual surface journey to the lunar south pole through optional candidate waypoints. Routes are optimized for distance, darkness exposure and Earth-invisible exposure. See [South Pole Route Planner](#south-pole-route-planner).
 
@@ -22,6 +23,10 @@ Compare two lunar landing sites by **geometric sunlight** and **direct-to-Earth 
 **South-pole presets first (U3).** The preset list now has two groups. "South pole" comes first: IM-2 Athena at Mons Mouton, the Shackleton rim where it meets the de Gerlache ridge, a high-illumination point on the de Gerlache ridge, IM-1 Odysseus near Malapert A, Chandrayaan-3 at Statio Shiv Shakti, and the Shackleton crater floor. "Elsewhere on the Moon" holds Apollo 11, Apollo 17, Blue Ghost Mission 1, Chang'e 4, Mare Orientale and Peary. The first screen now compares IM-2 with the Shackleton rim. Each coordinate's source is noted in `frontend/src/lib/sites.ts`. The de Gerlache point was checked only against the Wikipedia table that cites Gläser et al. (2017), not against the paper itself. Limitation: the ridge and rim sites are exactly where terrain matters most, and this model uses a smooth sphere. Real sunlight there can be higher than shown (a high ridge sees past the curve of the Moon) or lower (nearby peaks block the Sun), so treat these numbers as geometry, not predictions.
 
 **Plain-language layer (U5).** An "Explain" switch in the header, on by default, adds one plain sentence under each metric and under the elevation figures. For example, under "Longest night" it says the lander must survive that stretch on batteries and stay warm. A short "Why this matters" block opens the results. Under the timelines, a collapsed section lists every sunlight and Earth-contact window for both sites (start, end, duration), up to 50 rows per table, and marks windows cut off by the window edge. The sentences are fixed text in `frontend/src/lib/explain.ts`; they explain the metrics but say nothing site-specific.
+
+**Compare dates, not only sites (U4).** Each column is now a scenario: a site plus a start date. Tick "Site B starts on a different date" and give B its own start; "Same place as A" copies A's place into B, so you can compare one site on two dates. Duration and sampling stay shared. When the dates differ, the findings name both dates (for example "Mons Mouton (from 2026-12-15)"), the metrics table shows each start under its column, the scrubber shows the day number and both UTC times, the timeline's x axis becomes "days since each scenario's start", and the globe gets a "Light for A / Light for B" switch because it can be lit for only one date at a time. With the box unticked the request and the response's existing fields are unchanged; a regression test checks this against output captured before the change (synthetic provider). Limitation: the two scenarios must share duration and step.
+
+**Not built: terrain horizon (U6).** U6 needs a LOLA polar elevation model from the NASA PDS Geosciences Node. That server (and NAIF, for the SPICE kernels) could not be reached from the environment this work was done in, and the spec says not to substitute invented data. So every site, including the ridge and rim presets, still uses a smooth sphere with an ideal horizon. Say so in the presentation.
 
 ## Quick start
 
@@ -126,7 +131,8 @@ If the kernels are missing, `/api/health` reports `degraded` with the exact fix,
 {
   "sites": [
     {"id": "A", "label": "Apollo 11", "lat_deg": 0.6741, "lon_deg": 23.473},
-    {"id": "B", "label": "Shackleton", "lat_deg": -89.67, "lon_deg": 129.78}
+    {"id": "B", "label": "Shackleton", "lat_deg": -89.67, "lon_deg": 129.78,
+     "start_utc": "2026-12-15T00:00:00Z"}
   ],
   "start_utc": "2026-12-01T00:00:00Z",
   "duration_hours": 708.7,
@@ -134,6 +140,8 @@ If the kernels are missing, `/api/health` reports `degraded` with the exact fix,
   "mode": "spice"
 }
 ```
+
+`sites[].start_utc` is optional. Leave it out and the site uses the request's `start_utc`. Give it and that site's window starts there (same duration and step).
 
 The response contains:
 
@@ -143,20 +151,21 @@ The response contains:
   - `masks` (sample-wise `sun` / `earth` / `both`)
   - refined `intervals`
   - `metrics`: visible duration and fraction, longest visible interval, longest gap with window-edge flags, elevation range, near-horizon fraction, and duration/fraction with both visible
-- `subpoints`: subsolar and sub-Earth latitude/longitude, Earth distance
+  - `start_utc`, `timestamps_utc`, `subpoints`: this site's own window start, sample times and sub-points
+- `subpoints`: subsolar and sub-Earth latitude/longitude, Earth distance (top-level `timestamps_utc`, `subpoints` and window times describe site A; `elapsed_s` is shared)
 - `comparison`: `headline`, typed `statements` (comparison / observation / caveat), and the reporting `tolerance_s`
-- `metadata`: mode, provenance, conventions, limitations, kernels with SHA-256, toolkit version, sampling, refinement count, compute time
+- `metadata`: mode, provenance, conventions (including libration), limitations, kernels with SHA-256, toolkit version, sampling, refinement count, compute time, and `starts_differ`
 
 The full schema is at http://localhost:8000/docs.
 
 **Validation:**
 
 - latitude must be in [−90, 90] and longitude in [−180, 360] (normalized)
-- `start_utc` must be timezone-aware UTC
+- `start_utc` and any `sites[].start_utc` must be timezone-aware UTC
 - 1 h ≤ duration ≤ 366 d; 1 min ≤ step ≤ 24 h
 - at most **20,000 samples**
 - the two site ids must differ
-- the window must be within kernel coverage
+- each site's window must be within kernel coverage
 
 Errors return `{"error": {"code", "message", "details": [{field, message}]}}` with HTTP 422, 503, or 500.
 
@@ -169,6 +178,7 @@ These are not modelled. Each one is also listed in every response and in the UI.
 - **Eclipses.** Earth occultation of the Sun is not modelled.
 - **Power.** No panel geometry, efficiency, dust, or thermal effects.
 - **Communications.** No antenna pointing, link budget, ground stations, or relays.
+- **Two dates, one duration.** Site B can start on a different date, but both scenarios share the same duration and sampling step.
 - **Overall ranking.** There is no universal "best site". Findings compare single criteria within the chosen window only.
 - **Route Planner.** Route-specific limitations are listed under [Planner limitations](#planner-limitations).
 

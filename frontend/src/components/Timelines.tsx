@@ -22,10 +22,17 @@ interface Props {
   result: CompareResponse;
   index: number;
   onSelectTime: (iso: string) => void;
+  /** Used when the sites start on different dates: the x axis is then days since each scenario's start. */
+  onSelectIndex: (i: number) => void;
 }
 
-export default function Timelines({ result, index, onSelectTime }: Props) {
-  const x = useMemo(() => result.timestamps_utc.map(plotlyTime), [result]);
+export default function Timelines({ result, index, onSelectTime, onSelectIndex }: Props) {
+  // Equal starts: a shared UTC axis. Different starts: a numeric axis of days since each scenario's start.
+  const byDay = result.metadata.starts_differ;
+  const x = useMemo<(string | number)[]>(
+    () => (byDay ? result.elapsed_s.map((e) => e / 86400) : result.timestamps_utc.map(plotlyTime)),
+    [result, byDay],
+  );
 
   const { data, layout, cursorShapeIndex } = useMemo(() => {
     const [a, b] = result.sites;
@@ -60,6 +67,8 @@ export default function Timelines({ result, index, onSelectTime }: Props) {
     ];
 
     const shapes: Partial<Shape>[] = [];
+    const startMs = [Date.parse(a.start_utc), Date.parse(b.start_utc)];
+    const dayOf = (iso: string, site: 0 | 1) => (Date.parse(iso) - startMs[site]) / 86400e3;
     // Below-horizon band in each elevation subplot (from the data minimum up to 0°, so the axis range is unchanged)
     ([["y", a], ["y2", b]] as const).forEach(([yref, s]) => {
       const lo = Math.min(Math.min(...s.sun.el_deg), Math.min(...s.earth.el_deg));
@@ -84,8 +93,8 @@ export default function Timelines({ result, index, onSelectTime }: Props) {
           type: "rect",
           xref: "x",
           yref: "y3",
-          x0: plotlyTime(iv.start_utc),
-          x1: plotlyTime(iv.end_utc),
+          x0: byDay ? dayOf(iv.start_utc, l.site) : plotlyTime(iv.start_utc),
+          x1: byDay ? dayOf(iv.end_utc, l.site) : plotlyTime(iv.end_utc),
           y0: yc - 0.32,
           y1: yc + 0.32,
           fillcolor: l.color,
@@ -120,7 +129,11 @@ export default function Timelines({ result, index, onSelectTime }: Props) {
       hovermode: "x unified",
       hoverlabel: { bgcolor: FIELD, bordercolor: LINE, font: { color: INK, size: 13, family: FONT } },
       dragmode: "zoom",
-      xaxis: { ...axisStyle, type: "date", anchor: "y3", title: title("UTC"), showspikes: true, spikecolor: MUTED, spikethickness: 1, spikemode: "across" },
+      xaxis: {
+        ...axisStyle, type: byDay ? "linear" : "date", anchor: "y3",
+        title: title(byDay ? "Days since each scenario's start" : "UTC"),
+        showspikes: true, spikecolor: MUTED, spikethickness: 1, spikemode: "across",
+      },
       yaxis: { ...axisStyle, domain: [0.66, 1], title: title("A elevation (°)") },
       yaxis2: { ...axisStyle, domain: [0.33, 0.62], title: title("B elevation (°)") },
       yaxis3: {
@@ -136,13 +149,13 @@ export default function Timelines({ result, index, onSelectTime }: Props) {
       },
       shapes: shapes as Layout["shapes"],
       annotations: [
-        note(`A ${a.label}`, 1.0),
-        note(`B ${b.label}`, 0.62),
+        note(`A ${a.label}${byDay ? `, from ${a.start_utc.slice(0, 10)}` : ""}`, 1.0),
+        note(`B ${b.label}${byDay ? `, from ${b.start_utc.slice(0, 10)}` : ""}`, 0.62),
         note("Visibility intervals (refined)", 0.29),
       ],
     };
     return { data: traces, layout, cursorShapeIndex };
-  }, [result, x]);
+  }, [result, x, byDay]);
 
   const relayout = useMemo(
     () => ({ [`shapes[${cursorShapeIndex}].x0`]: x[index], [`shapes[${cursorShapeIndex}].x1`]: x[index] }),
@@ -156,7 +169,16 @@ export default function Timelines({ result, index, onSelectTime }: Props) {
       layout={layout}
       relayout={relayout}
       config={{ modeBarButtonsToRemove: ["select2d", "lasso2d", "autoScale2d"], scrollZoom: false }}
-      onClickX={(v) => onSelectTime(String(v))}
+      onClickX={(v) => {
+        if (!byDay) return onSelectTime(String(v));
+        // Nearest sample by elapsed time.
+        const t = Number(v) * 86400;
+        let best = 0;
+        result.elapsed_s.forEach((e, k) => {
+          if (Math.abs(e - t) < Math.abs(result.elapsed_s[best] - t)) best = k;
+        });
+        onSelectIndex(best);
+      }}
       ariaLabel="Sun and Earth elevation timelines and visibility intervals for both sites"
     />
   );

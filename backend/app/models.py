@@ -11,6 +11,15 @@ from . import config
 from .geometry import normalize_lon
 
 
+def _check_utc(v: datetime) -> datetime:
+    """Shared validator: an aware datetime in UTC (offset +00:00 or 'Z')."""
+    if v.tzinfo is None:
+        raise ValueError("start_utc must include a UTC designator, e.g. '2026-12-01T00:00:00Z'")
+    if v.utcoffset() != timezone.utc.utcoffset(None):
+        raise ValueError("start_utc must be in UTC (offset +00:00 or 'Z')")
+    return v.astimezone(timezone.utc)
+
+
 class SiteInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -18,6 +27,9 @@ class SiteInput(BaseModel):
     label: str = Field(..., min_length=1, max_length=64)
     lat_deg: float = Field(..., ge=-90.0, le=90.0, description="Planetocentric latitude, degrees")
     lon_deg: float = Field(..., ge=-180.0, le=360.0, description="East-positive longitude, degrees")
+    start_utc: Optional[datetime] = Field(
+        None, description="This scenario's start (ISO 8601 UTC). None means the request's start_utc."
+    )
 
     @field_validator("label")
     @classmethod
@@ -32,6 +44,11 @@ class SiteInput(BaseModel):
     def _norm_lon(cls, v: float) -> float:
         return normalize_lon(v)
 
+    @field_validator("start_utc")
+    @classmethod
+    def _utc(cls, v: Optional[datetime]) -> Optional[datetime]:
+        return None if v is None else _check_utc(v)
+
 
 class CompareRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -45,11 +62,7 @@ class CompareRequest(BaseModel):
     @field_validator("start_utc")
     @classmethod
     def _utc(cls, v: datetime) -> datetime:
-        if v.tzinfo is None:
-            raise ValueError("start_utc must include a UTC designator, e.g. '2026-12-01T00:00:00Z'")
-        if v.utcoffset() != timezone.utc.utcoffset(None):
-            raise ValueError("start_utc must be in UTC (offset +00:00 or 'Z')")
-        return v.astimezone(timezone.utc)
+        return _check_utc(v)
 
     @model_validator(mode="after")
     def _check(self) -> "CompareRequest":
@@ -107,6 +120,14 @@ class SiteMetrics(BaseModel):
     both_fraction: float
 
 
+class SubPoints(BaseModel):
+    subsolar_lat_deg: list[float]
+    subsolar_lon_deg: list[float]
+    sub_earth_lat_deg: list[float]
+    sub_earth_lon_deg: list[float]
+    earth_distance_km: list[float]
+
+
 class SiteResult(BaseModel):
     id: str
     label: str
@@ -118,14 +139,9 @@ class SiteResult(BaseModel):
     masks: dict[str, list[bool]]  # sun, earth, both (sample-wise, elevation > 0)
     intervals: dict[str, list[IntervalOut]]  # sun, earth, both (refined)
     metrics: SiteMetrics
-
-
-class SubPoints(BaseModel):
-    subsolar_lat_deg: list[float]
-    subsolar_lon_deg: list[float]
-    sub_earth_lat_deg: list[float]
-    sub_earth_lon_deg: list[float]
-    earth_distance_km: list[float]
+    start_utc: str = Field(..., description="This scenario's window start (UTC)")
+    timestamps_utc: list[str] = Field(..., description="This scenario's sample times (UTC)")
+    subpoints: SubPoints = Field(..., description="Subsolar and sub-Earth points at this scenario's sample times")
 
 
 class Statement(BaseModel):
@@ -156,6 +172,7 @@ class Metadata(BaseModel):
     window_start_utc: str
     window_end_utc: str
     window_duration_s: float
+    starts_differ: bool = Field(..., description="True when the two sites use different start times")
     step_s: float
     n_samples: int
     refinement_tolerance_s: float

@@ -121,10 +121,18 @@ export default function Scrubber({ result, index, onIndex }: Props) {
         aria-label="Simulation time"
         aria-valuetext={fmtUtc(result.timestamps_utc[index])}
       />
-      <div className="flex items-baseline gap-2 tabular-nums text-[12px] tabular-nums">
+      {result.metadata.starts_differ ? (
+        <div className="flex flex-wrap items-baseline gap-x-3 text-[13px] tabular-nums">
+          <span className="font-bold text-text">day {(result.elapsed_s[index] / 86400).toFixed(1)}</span>
+          <span className="text-text"><b>A</b> {fmtUtc(result.sites[0].timestamps_utc[index])}</span>
+          <span className="text-text"><b>B</b> {fmtUtc(result.sites[1].timestamps_utc[index])}</span>
+        </div>
+      ) : (
+        <div className="flex items-baseline gap-2 text-[13px] tabular-nums">
         <span className="text-text">{fmtUtc(result.timestamps_utc[index])}</span>
         <span className="text-muted">day {(result.elapsed_s[index] / 86400).toFixed(1)}</span>
       </div>
+      )}
     </div>
   );
 }
