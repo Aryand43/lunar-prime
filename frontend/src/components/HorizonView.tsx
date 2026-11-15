@@ -3,7 +3,6 @@
 import { useMemo } from "react";
 
 import { nextChange, type NextChange } from "@/lib/events";
-import { EXPLAIN } from "@/lib/explain";
 import { compass, fmtDuration, fmtLat, fmtLon, fmtUtc } from "@/lib/format";
 import { EARTH, EARTH_INK, FIELD, INK, LINE, MUTED, NIGHT, SUN, SUN_INK } from "@/lib/theme";
 import type { SiteResult } from "@/lib/types";
@@ -15,8 +14,8 @@ const STRIP_LIM = 10; // degrees shown above/below the ideal horizon in the stri
 const S = 200; // sky plot
 const C = S / 2;
 const R = 84;
-const W = 216; // near-horizon strip
-const H = 64;
+const W = 320; // near-horizon strip
+const H = 50;
 const TICK_H = 16;
 
 interface Props {
@@ -26,8 +25,6 @@ interface Props {
   /** Time of the current sample for this site, and the end of this site's window (both UTC). */
   timeUtc: string;
   windowEndUtc: string;
-  /** Show the plain-language sentence under the elevation figures. */
-  explain?: boolean;
 }
 
 function stride(n: number) {
@@ -100,40 +97,22 @@ function Countdown({ name, ink, c }: { name: string; ink: string; c: NextChange 
 }
 
 /** Current elevation as a large figure; grey with "below horizon" when the body is down. */
-function BigElevation({ name, ink, el }: { name: string; ink: string; el: number }) {
+function BigElevation({ name, ink, el, az }: { name: string; ink: string; el: number; az: number }) {
   const up = el > 0;
   return (
-    <p className="flex items-baseline gap-2 whitespace-nowrap">
-      <span className="text-[24px] leading-[30px] font-bold tabular-nums" style={{ color: up ? ink : MUTED }}>
+    <p className="flex flex-wrap items-baseline gap-x-2">
+      <span className="text-[24px] leading-[30px] font-bold whitespace-nowrap tabular-nums" style={{ color: up ? ink : MUTED }}>
         {name} {el >= 0 ? "+" : "−"}
         {Math.abs(el).toFixed(1)}°
       </span>
-      {!up && <span className="text-[13px] text-muted">below horizon</span>}
+      <span className="text-[13px] whitespace-nowrap text-muted tabular-nums">
+        {up ? "" : "below horizon, "}toward {az.toFixed(0)}° {compass(az)}
+      </span>
     </p>
   );
 }
 
-function Readout({ name, fill, ink, az, el }: { name: string; fill: string; ink: string; az: number; el: number }) {
-  const up = el > 0;
-  return (
-    <>
-      <span className="flex items-center gap-1.5 font-bold" style={{ color: ink }}>
-        <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: fill }} aria-hidden />
-        {name}
-      </span>
-      <span className="text-right tabular-nums">
-        {el >= 0 ? "+" : "−"}
-        {Math.abs(el).toFixed(2)}°
-      </span>
-      <span className="whitespace-nowrap text-right tabular-nums">
-        {az.toFixed(0)}° {compass(az)}
-      </span>
-      <span className={`text-right ${up ? "font-bold text-text" : "text-muted"}`}>{up ? "up" : "down"}</span>
-    </>
-  );
-}
-
-export default function HorizonView({ site, letter, index, timeUtc, windowEndUtc, explain = false }: Props) {
+export default function HorizonView({ site, letter, index, timeUtc, windowEndUtc }: Props) {
   const i = Math.min(index, site.sun.az_deg.length - 1);
   const sun = { az: site.sun.az_deg[i], el: site.sun.el_deg[i] };
   const earth = { az: site.earth.az_deg[i], el: site.earth.el_deg[i] };
@@ -183,22 +162,19 @@ export default function HorizonView({ site, letter, index, timeUtc, windowEndUtc
 
   return (
     <section aria-label={`Local horizon view for site ${letter}`} className="min-w-0">
-      <header className="mb-3">
-        <h3 className="flex items-center gap-2.5 text-[18px] leading-[24px] font-bold">
+      <header className="mb-2">
+        <h3 className="flex items-center gap-2.5 text-[18px] leading-[24px] font-bold" title={site.label}>
           <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-text text-[13px] text-bg">{letter}</span>
-          <span>{site.label}</span>
+          <span className="truncate">{site.label}</span>
         </h3>
-        <p className="mt-1 text-[13px] tabular-nums text-muted">
-          {fmtLat(site.lat_deg)} {fmtLon(site.lon_deg)}
+        <p className="mt-0.5 flex flex-wrap gap-x-3 text-[13px] text-muted">
+          <span className="tabular-nums">
+            {fmtLat(site.lat_deg)} {fmtLon(site.lon_deg)}
+          </span>
+          {Math.abs(site.lat_deg) >= 80 && <span>Smooth-sphere model. Real terrain is not included.</span>}
         </p>
-        {Math.abs(site.lat_deg) >= 80 && <p className="text-[13px] text-muted">Smooth-sphere model. Real terrain is not included.</p>}
       </header>
-      <div className="flex flex-col items-start gap-3">
-        <div className="space-y-0.5">
-          <BigElevation name="Sun" ink={SUN_INK} el={sun.el} />
-          <BigElevation name="Earth" ink={EARTH_INK} el={earth.el} />
-          {explain && <p className="max-w-[260px] pt-1 text-[13px] leading-[18px] text-muted">{EXPLAIN.sunElevation}</p>}
-        </div>
+      <div className="flex flex-wrap items-start gap-x-5 gap-y-3">
         <svg
           width={S}
           height={S}
@@ -229,44 +205,42 @@ export default function HorizonView({ site, letter, index, timeUtc, windowEndUtc
           {body(earth, EARTH, EARTH_INK, "Earth")}
           {body(sun, SUN, SUN_INK, "Sun")}
         </svg>
-        <div>
-          <p className="mb-1 text-[12px] text-muted">Within 10° of the horizon, by compass direction</p>
-          <svg width={W} height={H + TICK_H} viewBox={`0 0 ${W} ${H + TICK_H}`} role="img" aria-label="Elevation near the horizon versus azimuth">
-            <rect x={0} y={0} width={W} height={H / 2} fill={FIELD} />
-            <rect x={0} y={H / 2} width={W} height={H / 2} fill={NIGHT} />
-            {[90, 180, 270].map((a) => (
-              <line key={a} x1={(a / 360) * W} y1={0} x2={(a / 360) * W} y2={H} stroke={LINE} strokeOpacity={0.6} />
-            ))}
-            <path d={tracks.stripSun} fill="none" stroke={SUN} strokeWidth={1.6} />
-            <path d={tracks.stripEarth} fill="none" stroke={EARTH} strokeWidth={1.6} />
-            {stripDot(earth, EARTH, EARTH_INK)}
-            {stripDot(sun, SUN, SUN_INK)}
-            {(
-              [
-                ["N", 0, "start"],
-                ["E", 90, "middle"],
-                ["S", 180, "middle"],
-                ["W", 270, "middle"],
-                ["N", 360, "end"],
-              ] as const
-            ).map(([t, a, anchor]) => (
-              <text key={a} x={(a / 360) * W} y={H + 13} fontSize={12} fill={MUTED} textAnchor={anchor}>
-                {t}
-              </text>
-            ))}
-          </svg>
-        </div>
-        <div className="w-full space-y-1" aria-live="off">
-          <Countdown name="Sun" ink={SUN_INK} c={sunNext} />
-          <Countdown name="Earth" ink={EARTH_INK} c={earthNext} />
-        </div>
-        <div className="grid w-full max-w-[260px] grid-cols-[auto_1fr_auto_auto] gap-x-2.5 gap-y-1 border-t border-line pt-2 text-[13px] leading-[18px]">
-          <span />
-          <span className="text-right text-[12px] text-muted">Elevation</span>
-          <span className="text-right text-[12px] text-muted">Azimuth</span>
-          <span />
-          <Readout name="Sun" fill={SUN} ink={SUN_INK} az={sun.az} el={sun.el} />
-          <Readout name="Earth" fill={EARTH} ink={EARTH_INK} az={earth.az} el={earth.el} />
+        <div className="min-w-0 flex-1 space-y-2">
+          <div>
+            <BigElevation name="Sun" ink={SUN_INK} el={sun.el} az={sun.az} />
+            <BigElevation name="Earth" ink={EARTH_INK} el={earth.el} az={earth.az} />
+          </div>
+          <div aria-live="off">
+            <Countdown name="Sun" ink={SUN_INK} c={sunNext} />
+            <Countdown name="Earth" ink={EARTH_INK} c={earthNext} />
+          </div>
+          <div>
+            <p className="mb-1 text-[12px] text-muted">Within 10° of the horizon, by compass direction</p>
+            <svg width={W} height={H + TICK_H} viewBox={`0 0 ${W} ${H + TICK_H}`} role="img" aria-label="Elevation near the horizon versus azimuth">
+              <rect x={0} y={0} width={W} height={H / 2} fill={FIELD} />
+              <rect x={0} y={H / 2} width={W} height={H / 2} fill={NIGHT} />
+              {[90, 180, 270].map((a) => (
+                <line key={a} x1={(a / 360) * W} y1={0} x2={(a / 360) * W} y2={H} stroke={LINE} strokeOpacity={0.6} />
+              ))}
+              <path d={tracks.stripSun} fill="none" stroke={SUN} strokeWidth={1.6} />
+              <path d={tracks.stripEarth} fill="none" stroke={EARTH} strokeWidth={1.6} />
+              {stripDot(earth, EARTH, EARTH_INK)}
+              {stripDot(sun, SUN, SUN_INK)}
+              {(
+                [
+                  ["N", 0, "start"],
+                  ["E", 90, "middle"],
+                  ["S", 180, "middle"],
+                  ["W", 270, "middle"],
+                  ["N", 360, "end"],
+                ] as const
+              ).map(([t, a, anchor]) => (
+                <text key={a} x={(a / 360) * W} y={H + 13} fontSize={12} fill={MUTED} textAnchor={anchor}>
+                  {t}
+                </text>
+              ))}
+            </svg>
+          </div>
         </div>
       </div>
     </section>

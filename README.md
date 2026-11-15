@@ -13,6 +13,8 @@ Compare two lunar landing sites by **geometric sunlight** and **direct-to-Earth 
 
 ## What's new (November 2026)
 
+**Picture first (V2).** The first screen now shows the headline, then the lit globe beside both sky plots, then the time scrubber, all within a 1440 x 900 window. Each sky plot is a row: the sky disc, the current Sun and Earth elevations (with the compass direction of each), the time until each next rises or sets, and the strip of the sky within 10° of the horizon. The findings and the metrics table follow, then "Why this matters", the timelines and the method. The globe opens on its south-pole view, because both default sites are near the south pole.
+
 **Route planner removed (V1).** The challenge is about choosing where and when to land, not about driving, so the route planner tab is gone. Its last version is kept under the Git tag `route-planner-archive`.
 
 **Design refresh.** A light page with one font (Atkinson Hyperlegible Next). Colour is used only for the two bodies: yellow for the Sun, blue for Earth. The answer comes first: a two-sentence headline, the findings and a metrics table with bars, then the globe and sky plots, then the timelines.

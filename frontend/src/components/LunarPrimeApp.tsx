@@ -9,7 +9,7 @@ import type { CompareRequest, CompareResponse, HealthResponse } from "@/lib/type
 import { SiteCard, WindowCard, siteErrors, windowErrors, type SiteDraft, type WindowDraft } from "./Controls";
 import HorizonView from "./HorizonView";
 import type { GlobeView } from "./MoonGlobe";
-import { WHY_THIS_MATTERS } from "@/lib/explain";
+import { EXPLAIN, WHY_THIS_MATTERS } from "@/lib/explain";
 import { Findings, Headline, MethodsPanel, MetricsTable, WindowsList } from "./Results";
 import Scrubber from "./Scrubber";
 import Timelines from "./Timelines";
@@ -77,7 +77,7 @@ export default function LunarPrimeApp() {
   const [error, setError] = useState<ApiError | null>(null);
   const [index, setIndex] = useState(0);
   const [picking, setPicking] = useState<"A" | "B" | null>(null);
-  const [view, setView] = useState<{ name: GlobeView; nonce: number }>({ name: "near", nonce: 0 });
+  const [view, setView] = useState<{ name: GlobeView; nonce: number }>({ name: "south", nonce: 0 });
   const [explain, setExplain] = useState(true);
   const [lightFor, setLightFor] = useState<0 | 1>(0);
   const abortRef = useRef<AbortController | null>(null);
@@ -289,24 +289,13 @@ export default function LunarPrimeApp() {
           )}
 
           {result && (
-            <section aria-label="Findings and metrics" className={`space-y-8 border-b border-line pb-10 transition-opacity ${loading || stale ? "opacity-60" : ""}`}>
+            <section aria-label="Headline" className={`transition-opacity ${loading || stale ? "opacity-60" : ""}`}>
               <Headline result={result} />
-              <div className="grid grid-cols-1 gap-12 xl:grid-cols-[minmax(0,1fr)_560px]">
-                <Findings result={result} />
-                <MetricsTable result={result} explain={explain} />
-              </div>
             </section>
           )}
 
-          {result && explain && (
-            <section aria-label="Why this matters" className="border-b border-line pb-10">
-              <h2 className="mb-1.5 text-[18px] leading-[24px] font-bold">Why this matters</h2>
-              <p className="max-w-[820px] text-[15px] leading-[23px] text-text">{WHY_THIS_MATTERS}</p>
-            </section>
-          )}
-
-          <div className="grid grid-cols-1 gap-8 border-b border-line pb-10 xl:grid-cols-[560px_minmax(0,1fr)]">
-            <div className="relative h-[420px] overflow-hidden bg-space sm:h-[520px] xl:h-[620px]">
+          <div className="grid grid-cols-1 gap-8 xl:grid-cols-[460px_minmax(0,1fr)]">
+            <div className="relative h-[420px] overflow-hidden bg-space sm:h-[520px] xl:h-[460px]">
               <MoonGlobe sites={globeSites} subsolar={subsolar} subEarth={subEarth} picking={picking} onPick={onPick} view={view} />
               <div className="pointer-events-none absolute inset-x-0 top-0 flex flex-wrap items-start justify-between gap-2 p-3">
                 <div className="pointer-events-auto flex gap-1" role="group" aria-label="Globe view">
@@ -360,7 +349,7 @@ export default function LunarPrimeApp() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 content-start gap-8 sm:grid-cols-2">
+            <div className={`grid grid-cols-1 content-start gap-5 transition-opacity ${loading || stale ? "opacity-60" : ""}`}>
               {result
                 ? result.sites.map((s, k) => (
                     <HorizonView
@@ -370,7 +359,6 @@ export default function LunarPrimeApp() {
                       index={i}
                       timeUtc={s.timestamps_utc[i]}
                       windowEndUtc={s.timestamps_utc[s.timestamps_utc.length - 1]}
-                      explain={explain}
                     />
                   ))
                 : LETTERS.map((l) => (
@@ -378,13 +366,29 @@ export default function LunarPrimeApp() {
                       {loading ? "Computing local horizon…" : `Horizon view for site ${l}`}
                     </div>
                   ))}
+              {result && explain && <p className="max-w-[560px] text-[13px] leading-[18px] text-muted">{EXPLAIN.sunElevation}</p>}
             </div>
           </div>
 
           {result && (
-            <div className="sticky top-14 z-30">
+            <div className="sticky top-14 z-30 -mt-6">
               <Scrubber key={lastReq ?? ""} result={result} index={i} onIndex={setIndex} />
             </div>
+          )}
+
+          {result && (
+            <section aria-label="Findings and metrics" className={`border-b border-line pb-10 transition-opacity ${loading || stale ? "opacity-60" : ""}`}>
+              <div className="grid grid-cols-1 gap-12 xl:grid-cols-[minmax(0,1fr)_560px]">
+                <Findings result={result} />
+                <MetricsTable result={result} explain={explain} />
+              </div>
+            </section>
+          )}
+          {result && explain && (
+            <section aria-label="Why this matters" className="border-b border-line pb-10">
+              <h2 className="mb-1.5 text-[18px] leading-[24px] font-bold">Why this matters</h2>
+              <p className="max-w-[820px] text-[15px] leading-[23px] text-text">{WHY_THIS_MATTERS}</p>
+            </section>
           )}
 
           <div className={`space-y-10 transition-opacity ${loading || stale ? "opacity-60" : ""}`}>
