@@ -1,3 +1,5 @@
+// Optional hypothetical south-polar demo network (Advanced > Custom waypoints). The default planner
+// generates its own planning-waypoint corridors from any start position instead.
 // Hypothetical south-polar demo network. These are NOT real or planned lunar bases: they are
 // editable candidate waypoints arranged as three corridors (direct, east, west) toward the pole.
 // Spacing is chosen so every neighbouring hop is < 55 km (the default leg limit), the direct
@@ -49,6 +51,11 @@ export interface PlannerParams {
   exposureScaleHours: string;
   localSearch: boolean;
   mode: "spice" | "synthetic";
+  /** Generate planning-waypoint corridors automatically (default on). */
+  autoNetwork: boolean;
+  /** Add verified catalogue sites near the corridor as candidate positions. */
+  includeCatalog: boolean;
+  planningMode: "exact" | "coarse";
 }
 
 // 2027-02-13: subsolar latitude ~0 deg, so near-pole sunlight depends strongly on longitude.
@@ -66,6 +73,9 @@ export const DEMO_PARAMS: PlannerParams = {
   exposureScaleHours: "24",
   localSearch: true,
   mode: "spice",
+  autoNetwork: true,
+  includeCatalog: false,
+  planningMode: "exact",
 };
 
 export const GRID_OPTIONS = [10, 15, 30, 60, 120];

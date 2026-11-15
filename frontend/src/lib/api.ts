@@ -1,4 +1,5 @@
-import type { RouteRequest, RouteResponse } from "./routeTypes";
+import type { PreflightResponse, RouteRequest, RouteResponse } from "./routeTypes";
+import type { Catalogue } from "./siteTypes";
 import type { ApiErrorBody, CompareRequest, CompareResponse, HealthResponse } from "./types";
 
 export class ApiError extends Error {
@@ -71,4 +72,43 @@ export async function postRoute(req: RouteRequest, signal?: AbortSignal): Promis
     if ((e as Error).name === "AbortError") throw e;
     throw new ApiError("Cannot reach the Lunar Prime backend.", "backend_unreachable", 0);
   }
+}
+
+async function call<T>(url: string, init?: RequestInit): Promise<T> {
+  try {
+    return await parse<T>(await fetch(url, init));
+  } catch (e) {
+    if (e instanceof ApiError) throw e;
+    if ((e as Error).name === "AbortError") throw e;
+    throw new ApiError("Cannot reach the Lunar Prime backend.", "backend_unreachable", 0);
+  }
+}
+
+export function fetchSites(signal?: AbortSignal): Promise<Catalogue> {
+  return call<Catalogue>("/api/sites", { signal });
+}
+
+export function postPreflight(req: RouteRequest, signal?: AbortSignal): Promise<PreflightResponse> {
+  return call<PreflightResponse>("/api/route/preflight", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(req),
+    signal,
+  });
+}
+
+export interface StoredRun {
+  run_id: string;
+  created_at: number;
+  mode: string;
+  status: string;
+  input_hash: string;
+  result_hash: string;
+  parent_run_id: string | null;
+  request: RouteRequest;
+  response?: RouteResponse;
+}
+
+export function fetchRun(runId: string, full = false, signal?: AbortSignal): Promise<StoredRun> {
+  return call<StoredRun>(`/api/runs/${encodeURIComponent(runId)}${full ? "?full=1" : ""}`, { signal });
 }

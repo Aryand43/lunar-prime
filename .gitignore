@@ -9,3 +9,6 @@ __pycache__/
 .pytest_cache/
 
 .DS_Store
+
+# Local persistence (SQLite, Qdrant local mode)
+backend/.data/

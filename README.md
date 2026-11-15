@@ -7,7 +7,9 @@ Compare two lunar landing sites by **geometric sunlight** and **direct-to-Earth 
 - Scrub through time. The globe is lit from the computed subsolar point, and a local-horizon sky plot shows the Sun and Earth for each site.
 - Compare synchronized elevation timelines and refined visibility intervals, summary metrics, and plain-language findings.
 - Read the method, limitations, kernel provenance (with SHA-256), and export the full result as JSON.
-- **Route Planner tab:** plan a conceptual surface journey to the lunar south pole through optional candidate waypoints. Routes are optimized for distance, darkness exposure and Earth-invisible exposure. See [South Pole Route Planner](#south-pole-route-planner).
+- **Route simulator (default tab):** start anywhere on the Moon (typed N/S/E/W, pasted decimal degrees, globe pick, or a verified mission site) and get candidate routes to the geographic South Pole. A deterministic planning-waypoint network is generated automatically. See [Route simulator](#route-simulator-start-anywhere).
+- **Verified mission-site layer:** historical crewed and robotic landing sites and NASA's candidate Artemis III regions, each with a cited NASA/NSSDCA source. See [Site catalogue](#site-catalogue).
+- **Mission analyst:** a persistent, grounded chat drawer that answers follow-up questions from stored run data and project documentation. See [Mission analyst](#mission-analyst).
 
 > **Scope.** "Visible" means the body's **centre** is above an **ideal, terrain-free horizon** (elevation > 0°). Sunlight is not electrical power. Earth visibility is not a guaranteed communication link. See [Limitations](#limitations).
 
@@ -28,6 +30,14 @@ cd frontend && npm install && npm run dev
 ```
 
 Open http://localhost:3000. Next.js proxies `/api/*` to the backend. Set `BACKEND_URL` if the backend is not at `http://127.0.0.1:8000`.
+
+To enable the mission analyst, start the backend with an Anthropic API key (see [.env.example](.env.example) for every option):
+
+```bash
+cd backend && ANTHROPIC_API_KEY=sk-ant-... uv run uvicorn app.main:app --port 8000
+```
+
+Without a key everything else works and the analyst drawer explains why it is unavailable. Runs and conversations persist in `backend/.data/` (SQLite and Qdrant local mode, git-ignored).
 
 Tests:
 
@@ -53,15 +63,24 @@ backend/app/
   models.py      typed Pydantic request/response contracts
   routing.py         route planner: spherical legs, exposure integration, time-expanded search, local refinement, baselines
   routing_models.py  typed /api/route contracts
-  routing_service.py response assembly, baseline comparison, deterministic route explanation
-  main.py        FastAPI: GET /api/health, POST /api/compare, POST /api/route
+  routing_service.py response assembly, baseline comparison, deterministic route explanation, diagnostics
+  route_network.py   automatic planning-waypoint corridors, preflight work estimate, coarse planning
+  site_catalog.py    versioned, source-cited site catalogue (data/sites.json)
+  persistence.py     SQLite: immutable runs, sessions, messages, rolling summaries, proposals, FTS5 index
+  retrieval.py       Qdrant (local/server) + FTS5 hybrid retrieval behind small interfaces; embedders
+  chat_tools.py      read-only analyst tools over stored runs, citation resolution, grounding check
+  chat_service.py    provider abstraction (Anthropic), bounded context, streaming tool loop, proposals
+  chat_api.py        /api/chat/* endpoints (SSE), session tokens, rate limits
+  main.py        FastAPI app and routes
+backend/data/
+  sites.json     the catalogue        docs/*.md   method documentation indexed for the analyst
 frontend/src/
   components/    LunarPrimeApp (tabs), MoonGlobe (R3F), Timelines (Plotly), HorizonView (SVG), Controls, Results, Scrubber,
-                 RoutePlanner, RouteControls, RouteResults
-  lib/           API types/client, presets, route demo network, formatting, frame mapping and great-circle arcs
+                 RoutePlanner (console), StartPicker, SiteDetails, MissionAnalyst, Markdown, RouteControls, RouteResults
+  lib/           API types/clients (api, chatApi), coordinate parsing (coords), site types, formatting, geo helpers
 ```
 
-No database, authentication, or chatbot.
+There is no user authentication: see [Public deployment](#public-deployment-security).
 
 ## Scientific method
 
@@ -146,7 +165,7 @@ The full schema is at http://localhost:8000/docs.
 - the two site ids must differ
 - the window must be within kernel coverage
 
-Errors return `{"error": {"code", "message", "details": [{field, message}]}}` with HTTP 422, 503, or 500.
+Errors return `{"error": {"code", "message", "details": [{field, message}]}}` with HTTP 422, 503, 429 (rate limit), or 500.
 
 ## Limitations
 
@@ -164,7 +183,7 @@ These are not modelled. Each one is also listed in every response and in the UI.
 
 > **Conceptual spherical-surface route. Terrain, slopes, obstacles, battery/thermal limits, and communication link budgets are not modelled.**
 
-Open the **Route Planner** tab. It runs the demo network on load. To plan your own route:
+The planner described below is the engine behind the [route simulator](#route-simulator-start-anywhere). With the automatic network the waypoints are generated; the hypothetical demo network can still be loaded from **Advanced settings → Reset demo network**. To plan with your own waypoints:
 
 1. Edit the start and destination. The destination defaults to the geographic south pole (−90°, 0°).
 2. Edit the candidate waypoints: change their coordinates, add or remove them, or place them on the globe with ⌖.
@@ -337,6 +356,83 @@ The demo solves in about 1 s. SPICE is called once per request to build the ephe
 - Waypoints are hypothetical.
 - Optimality is bounded by the time grid, the candidate network, the sampling resolution, and a local continuous-time refinement. The result is not a globally optimal continuous route and not a certified safe route.
 - Revisiting a base is allowed in the graph search, as physically legitimate waiting/back-tracking. Routes are reported as the sequence actually travelled.
+
+## Route simulator (start anywhere)
+
+**Coordinates.** Planetocentric latitude and **east-positive** longitude (MOON_ME), always **latitude first**. The start can be set by:
+
+- typing magnitudes with explicit N/S and E/W toggles;
+- pasting decimal degrees (`-86.2, 35.4`, or `86.2S 35.4E`; with letters on both values either order is accepted);
+- **Pick on globe** (a drag rotates the globe and never places a point; Esc cancels);
+- searching the verified site catalogue, or **Use as start** on a site card.
+
+Malformed, ambiguous (for example `120, 10`, or a minus sign together with a hemisphere letter), out-of-range and non-finite input is rejected with a specific message. Longitudes are normalised to (−180°, 180°]. Values keep full precision internally and are rounded only for display. The destination defaults to the geographic South Pole (−90°, 0°); a custom destination is under **Advanced settings**. A start already at the destination returns a successful zero-distance, zero-duration itinerary.
+
+**Automatic network** (`auto_network: true`, default in the UI). `route_network.py` builds a deterministic, bounded candidate network:
+
+- a central great-circle corridor plus two lateral corridors (`planning_mode: "exact"`), or one corridor (`"coarse"`);
+- along-track spacing ≤ 0.7 × max leg and lateral offset 0.4 × max leg, so straight and diagonal hops respect `max_leg_km`;
+- nodes are labelled **"Planning waypoint"** (hypothetical; no terrain safety, power, supplies or communications implied);
+- near-antipodal endpoints (including North Pole → South Pole) use an explicit, deterministic anchor 90° from the start instead of SLERP across the antipode; the response discloses that other equally short corridors exist;
+- `include_catalog_sites: true` adds catalogue landing sites near the corridor as candidate positions (labelled "Catalogue site").
+
+The existing time-expanded search, exposure integration, waiting/grid-alignment rules, local refinement and baselines are unchanged and are applied to the generated network.
+
+**Preflight and work limits.** `POST /api/route/preflight` (pure geometry, no SPICE) returns the great-circle distance, the distance/speed lower bound on travel time, the estimated network size, time states and sample evaluations, and the binding constraints with specific suggestions. The planner rejects oversized exact searches before any ephemeris work. **Coarse planning** is used only when explicitly selected: a single corridor and, if needed, a coarser time grid; every approximation is listed in `network.approximations`. Speed, horizon, leg limit and mode are never changed silently. Examples measured with SPICE on this machine (exact grid, 2 s – 4 s): Apollo 11 area → pole (2,750 km at 20 km/h, legs ≤ 400 km); North Pole → South Pole (5,458 km, legs ≤ 800 km, 2 h grid).
+
+**Infeasible requests** return `200` with `status: "infeasible"`, the reason, and `diagnostics` (`great_circle_km`, `min_travel_hours`, `binding_constraint` = horizon / max_leg_km / max_wait_hours, and a concrete `suggestion`).
+
+**Run records.** Every computed route is stored as an immutable run (`run.run_id`, `input_hash`, `result_hash`) so the analyst can cite it later. `GET /api/runs/{run_id}` returns the stored request (`?full=1` includes the response).
+
+**Interface.** Globe-first console: compact start/destination/departure controls with everything else under Advanced; a floating playback bar (speed control; scrubbing moves the rover, UTC, lighting and the exposure chart together); Frame route and Follow rover; layer toggles (mission sites, planning waypoints, candidate network — hidden by default — and baseline); hover a route segment for its times and exposure, click it or an itinerary row to highlight it; idle / computing / success / infeasible / error / stale states, with stale requests aborted and late responses ignored. Animation honours `prefers-reduced-motion`. On narrow screens the globe stays on top with Plan / Results / Analyst tabs below.
+
+## Site catalogue
+
+`backend/data/sites.json` (version `2026-11-15.1`), served by `GET /api/sites`. Categories: `crewed_landing`, `robotic_landing`, `proposed_region` (plus `planning_waypoint` and `user_defined` for non-catalogue points). **None is an operational base**, and the SPICE kernels are not a catalogue of bases: catalogue positions are independent of the SPICE Sun/Earth geometry.
+
+| Records | Source (verified 2026-11-15) | Frame / precision |
+|---|---|---|
+| Apollo 11, 12, 14, 15, 16, 17 lunar modules | [NSSDCA Apollo Landing Sites](https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_sites.html) (updated 2017-03-06; LRO measurements, Wagner et al. 2017) | DE421 mean Earth/polar axis; 4–5 decimals |
+| Surveyor 1, 3; Luna 16, 24; Chang'e 3, 4, 5, 6; Chandrayaan-3; SLIM; IM-2 | [NSSDCA Table of Anthropogenic Impacts and Spacecraft on the Moon](https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_artifact_impacts.html) (updated 2025-08-13) | DE421 ME; 0.001° ≈ 30 m |
+| Nine Artemis III candidate regions | [NASA RELEASE24-136](https://www.nasa.gov/news-release/nasa-provides-update-on-artemis-iii-moon-landing-regions/) (2024-10-28) | **No coordinates or boundaries published, so none are plotted** |
+
+Unverified: NASA has since re-scoped Artemis III; whether these nine regions now apply to a later mission was not confirmed, so they remain labelled as the October 2024 Artemis III candidate regions.
+
+**Refresh procedure.** Re-read each source page, update the records and `retrieved` dates, bump `version`, and run `uv run pytest` (tests check that every record has a source and that broad regions carry no invented point). Do not add a point for a region unless the source publishes one. Restart the backend; catalogue text is re-indexed automatically (content-hash deduplicated).
+
+## Mission analyst
+
+A drawer ("Ask mission analyst") for follow-up questions about the current simulation. It distinguishes:
+
+1. **Computed results**: only from typed, read-only tools over the stored run: `get_run_summary`, `get_route_segments`, `get_baseline_comparison`, `get_visibility_intervals`, `get_site_details`, `list_session_runs`.
+2. **Documentation and sources**: `search_documents` over `backend/data/docs/*.md`, the method/limitation text in `config.py`, and catalogue records.
+3. **Explanations not simulated**: the model must label them "Not simulated:".
+
+Answers cite with `[ref:…]` markers that the backend resolves to actual run fields, segments, visibility intervals, catalogue records or ingested chunks; unresolvable references are removed. Computed references (teal) and source references (blue) are shown separately and are clickable (a segment reference highlights it on the globe; an interval moves the scrubber). A heuristic grounding check flags any number in an answer that does not appear in the tool data. Synthetic-mode runs are labelled as not SPICE/NASA data.
+
+**Counterfactuals.** "What if I depart later?" is never answered by guessing: the model calls `propose_comparison` with explicit, allow-listed changes, validated against the normal request contract and preflight work limits. Nothing runs until the user clicks **Run comparison**; the comparison executes through the same route function (same limits, SPICE handling and persistence), is stored as a new run with `parent_run_id`, and its comparison text is generated deterministically (no LLM). No shell, code execution or URL fetching is exposed to the model.
+
+**Run binding.** Each user message is permanently bound to the run shown when it was sent; new runs never overwrite the run an earlier answer discussed. Older runs remain queryable within the conversation.
+
+**Conversation memory.** No UI turn cap. History is paginated. Model context is bounded: stable system prompt + rolling summary (written when ≥ 24 messages are unsummarised; also indexed) + lexically recalled older messages + the 12 most recent messages + retrieved documents. Provider context-limit, rate-limit, timeout and authentication failures are reported as explicit error events; partial answers are kept on cancellation.
+
+**Provider.** `chat_service.AnthropicProvider` (official Anthropic Python SDK, async streaming, server-side only). Default model `claude-opus-5-5` at `medium` effort, with Anthropic's server-side refusal fallback enabled (`LUNAR_PRIME_LLM_FALLBACKS=off` disables it). Usage is billed per token by Anthropic; nothing here is free or unlimited. Per request: ≤ 4,000-character message, ≤ 16,000 output tokens per call, ≤ 8 tool rounds, a 300,000-token budget across rounds, 90 s timeout with 2 SDK retries. Chat runs on async handlers and never holds the SPICE lock; LLM and embedding calls never happen inside routing.
+
+**Retrieval.** Qdrant is the default vector store because it offers a persistent embedded mode for single-process development and the same API against a Qdrant server for concurrent deployment, with exact payload filters. That is a fit for this project, not a claim that it is the best vector database. Access is behind a small `VectorStore` interface. Retrieval is hybrid: Qdrant semantic results fused (reciprocal rank) with SQLite FTS5 BM25. Chunks are deduplicated by content hash; the collection name contains the embedding model and dimension, so changing either re-indexes into a new collection without mixing vectors. Searches are scoped structurally (global documents, this session only, this run only). Trajectory samples are never embedded and vector similarity is never used for numbers. If Qdrant or the embedding provider fails, retrieval degrades to lexical search and reports it in `/api/chat/status`. Without an embedding provider, a local hashing embedder (lexical similarity only) is used.
+
+**Persistence.** SQLite (`LUNAR_PRIME_DB_PATH`, WAL mode): runs, sessions, messages, rolling summaries, proposals, FTS indexes. History survives restarts. Deleting a conversation deletes its messages, summaries, proposals and indexed vectors.
+
+**Endpoints.** `GET /api/chat/status`; `POST /api/chat/sessions` → `{session_id, token}`; `GET /api/chat/sessions/{id}/messages?before_id=&limit=`; `POST /api/chat/sessions/{id}/messages` (`{content, run_id}`, `text/event-stream` events `meta`, `delta`, `tool`, `proposal`, `error`, `done`); `POST …/proposals/{pid}/run` and `/reject`; `DELETE /api/chat/sessions/{id}`. All session endpoints require the `X-Session-Token` header.
+
+## Public deployment security
+
+The current setup is for local, single-user use. Before any public or multi-user deployment you need, at minimum:
+
+- real user authentication and per-user authorisation for sessions **and stored runs** (session tokens only isolate conversations; run ids are unguessable but not access-controlled);
+- TLS, a restricted `LUNAR_PRIME_CORS`, and secrets in a secret manager (never in the frontend bundle or logs);
+- a shared rate limiter and per-user spending limits (the built-in limiter is in-process and per-IP);
+- Qdrant in server mode with an API key, and a multi-worker-safe SQLite replacement or a single writer;
+- monitoring of provider spend, and a data-retention policy for conversations.
 
 ## Credits
 

@@ -28,11 +28,58 @@ export interface RouteRequest {
   distance_scale_km: number;
   exposure_scale_hours: number;
   local_search: boolean;
+  auto_network: boolean;
+  include_catalog_sites: boolean;
+  planning_mode: "exact" | "coarse";
   mode: Mode;
 }
 
 export interface BaseOut extends RouteBaseInput {
   role: "start" | "waypoint" | "destination";
+  kind: "user" | "planning" | "catalog";
+}
+
+export interface NetworkOut {
+  generated: boolean;
+  generator: string | null;
+  n_generated: number;
+  n_user_waypoints: number;
+  n_catalog_sites: number;
+  catalog_site_ids: string[];
+  corridors: number;
+  along_spacing_km: number | null;
+  lateral_offset_km: number | null;
+  planning_mode: "exact" | "coarse";
+  notes: string[];
+  approximations: string[];
+}
+
+export interface DiagnosticsOut {
+  great_circle_km: number;
+  min_travel_hours: number;
+  horizon_hours: number;
+  binding_constraint: string | null;
+  suggestion: string | null;
+}
+
+export interface RunRef {
+  run_id: string;
+  input_hash: string;
+  result_hash: string;
+  parent_run_id: string | null;
+}
+
+export interface PreflightResponse {
+  great_circle_km: number;
+  min_travel_hours: number;
+  horizon_hours: number;
+  within_limits: boolean;
+  start_at_destination: boolean;
+  binding_constraints: string[];
+  suggestions: string[];
+  network: NetworkOut | null;
+  work: { n_steps: number; n_bases: number; n_candidate_legs: number; time_states: number; estimated_sample_evals: number; grid_minutes: number } | null;
+  coarse_available: boolean;
 }
 
 export interface SegmentOut {
@@ -178,4 +225,7 @@ export interface RouteResponse {
     kernels: KernelOut[];
     toolkit_version: string | null;
   };
+  network?: NetworkOut | null;
+  diagnostics?: DiagnosticsOut | null;
+  run?: RunRef | null;
 }

@@ -120,7 +120,9 @@ export function ComparisonTable({ res }: { res: RouteResponse }) {
   );
 }
 
-export function Itinerary({ plan }: { plan: RoutePlan }) {
+const ident = (id: string) => id;
+
+export function Itinerary({ plan, name = ident }: { plan: RoutePlan; name?: (id: string) => string }) {
   return (
     <div className="relative overflow-x-auto">
       <table className="w-full min-w-[460px] border-collapse text-[12.5px]">
@@ -138,7 +140,7 @@ export function Itinerary({ plan }: { plan: RoutePlan }) {
           {plan.stops.map((s, i) => (
             <tr key={s.base_id + i} className="border-b border-line/60">
               <td className="py-1.5 pr-3 font-mono text-faint">{i === 0 ? "S" : i === plan.stops.length - 1 ? "◎" : i}</td>
-              <td className="py-1.5 pr-3 text-text">{s.base_id}</td>
+              <td className="py-1.5 pr-3 text-text">{name(s.base_id)}</td>
               <td className="py-1.5 pr-3 font-mono text-muted">{short(s.arrive_utc)}</td>
               <td className="py-1.5 pr-3 font-mono text-text">
                 {s.wait_s > 0 ? fmtDuration(s.wait_s) : "—"}
@@ -153,7 +155,7 @@ export function Itinerary({ plan }: { plan: RoutePlan }) {
   );
 }
 
-export function LegTable({ plan }: { plan: RoutePlan }) {
+export function LegTable({ plan, name = ident, selected = null, onSelect }: { plan: RoutePlan; name?: (id: string) => string; selected?: number | null; onSelect?: (i: number) => void }) {
   const waitBy = new Map<string, { dark: number; earth: number; dur: number }>();
   for (const s of plan.segments)
     if (s.kind === "wait") {
@@ -176,14 +178,23 @@ export function LegTable({ plan }: { plan: RoutePlan }) {
         </thead>
         <tbody>
           {plan.segments.map((s, i) => (
-            <tr key={i} className="border-b border-line/60">
+            <tr
+              key={i}
+              className={`border-b border-line/60 ${onSelect ? "cursor-pointer hover:bg-panel-2" : ""} ${selected === i ? "bg-accent/10" : ""}`}
+              onClick={onSelect ? () => onSelect(i) : undefined}
+              aria-selected={selected === i}
+            >
               <td className="py-1.5 pr-3 text-text">
-                {s.kind === "move" ? (
+                {onSelect ? (
+                  <button type="button" className="text-left" onClick={(e) => { e.stopPropagation(); onSelect(i); }} aria-label={`Highlight segment ${i + 1}`}>
+                    {s.kind === "move" ? <>{name(s.base_id)} <span className="text-faint">→</span> {name(s.to_id ?? "")}</> : <span className="text-muted">wait at {name(s.base_id)}{s.alignment_wait_s > 0 ? " (incl. grid alignment)" : ""}</span>}
+                  </button>
+                ) : s.kind === "move" ? (
                   <>
-                    {s.base_id} <span className="text-faint">→</span> {s.to_id}
+                    {name(s.base_id)} <span className="text-faint">→</span> {name(s.to_id ?? "")}
                   </>
                 ) : (
-                  <span className="text-muted">wait at {s.base_id}{s.alignment_wait_s > 0 ? " (incl. grid alignment)" : ""}</span>
+                  <span className="text-muted">wait at {name(s.base_id)}{s.alignment_wait_s > 0 ? " (incl. grid alignment)" : ""}</span>
                 )}
               </td>
               <td className="py-1.5 pr-3 text-right font-mono tabular-nums">{s.kind === "move" ? s.distance_km.toFixed(1) : "—"}</td>
@@ -195,9 +206,7 @@ export function LegTable({ plan }: { plan: RoutePlan }) {
           ))}
         </tbody>
       </table>
-      <p className="mt-2 text-[11px] text-faint">
-        Moving segments are evaluated at the actual position and time along the great-circle track, not from endpoint values. Waits use the base&apos;s fixed coordinates.
-      </p>
+      <p className="mt-2 text-[11px] text-faint">Exposure is evaluated at the actual moving position and time. Click a row to highlight it on the globe.</p>
     </div>
   );
 }

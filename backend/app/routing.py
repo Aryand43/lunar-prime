@@ -319,6 +319,7 @@ class Evaluation:
     longest_earth_s: float = 0.0
     segments: list[dict] = field(default_factory=list)
     trajectory: Optional[dict] = None
+    zero: bool = False
 
 
 def evaluate(ctx: Context, sch: Schedule, with_trajectory: bool = False) -> Evaluation:
@@ -676,7 +677,7 @@ def reachable_from_start(ctx: Context, legs: list[Leg]) -> set[int]:
 # --------------------------------------------------------------------------------------------
 
 
-def build_bases(start, waypoints, destination) -> list[Base]:
+def build_bases(start, waypoints, destination, allow_start_at_destination: bool = False) -> list[Base]:
     out = []
     for role, items in (("start", [start]), ("waypoint", waypoints), ("destination", [destination])):
         for it in items:
@@ -686,6 +687,8 @@ def build_bases(start, waypoints, destination) -> list[Base]:
     for i in range(len(out)):
         for j in range(i + 1, len(out)):
             if gc_distance_km(out[i].u, out[j].u) < config.ROUTE_COINCIDENT_KM:
+                if allow_start_at_destination and {out[i].role, out[j].role} == {"start", "destination"}:
+                    continue
                 raise RoutingError(f"bases '{out[i].id}' and '{out[j].id}' are at the same physical location")
     return out
 
@@ -721,8 +724,17 @@ def estimate_and_check(ctx: Context) -> tuple[list[Leg], dict]:
     return legs, dict(n_steps=N, n_ephemeris_epochs=n_eph, estimated_sample_evals=evals)
 
 
+def lower_bound_h(ctx: Context) -> float:
+    return ctx.distance(ctx.start, ctx.dest) / ctx.p.speed_kmh
+
+
 def infeasibility_reason(ctx: Context, legs: list[Leg]) -> str:
     p = ctx.p
+    lb = lower_bound_h(ctx)
+    if lb > p.horizon_s / 3600 + 1e-9:
+        return (f"No feasible route within these constraints: the binding constraint is the planning horizon. "
+                f"The great-circle distance is {ctx.distance(ctx.start, ctx.dest):.1f} km, so at {p.speed_kmh:g} km/h "
+                f"any route needs at least {lb:.1f} h of movement, beyond the {p.horizon_s / 3600:.1f} h horizon.")
     reach = reachable_from_start(ctx, legs)
     if ctx.dest not in reach:
         nearest = min(reach, key=lambda i: ctx.distance(i, ctx.dest))
@@ -739,20 +751,61 @@ def infeasibility_reason(ctx: Context, legs: list[Leg]) -> str:
             f"{p.max_wait_s / 3600:.2f} h waiting limit, or arrives after the horizon once aligned to the grid.")
 
 
-def run_route(req, provider: EphemerisProvider, coverage: Optional[tuple[float, float, str, str]] = None) -> dict:
-    """Plan a route. Returns plain Python structures; routing_service converts to response models."""
-    t_start = time.perf_counter()
-    bases = build_bases(req.start, req.waypoints, req.destination)
-    if len(bases) > config.ROUTE_MAX_BASES:
-        raise RoutingError(f"{len(bases)} bases exceeds the limit of {config.ROUTE_MAX_BASES}")
+def _zero_distance(ctx: Context) -> Evaluation:
+    """Start already at the destination: a successful, zero-distance, zero-duration itinerary."""
+    sch = Schedule([ctx.start, ctx.dest], [0.0], [0.0])
+    ev = Evaluation(True, None, sch, cost=0.0, arrival_s=0.0)
+    times = np.array([0.0])
+    pos, basis = ctx.base_geom(ctx.start, 1)
+    el = ctx.elevations(times[None], pos, basis)
+    ev.trajectory = _assemble_trajectory(ctx, [(times, pos, el, "wait", -1)])
+    ev.zero = True
+    return ev
+
+
+def params_from(req) -> Params:
     w = req.weights
-    p = Params(
+    return Params(
         speed_kmh=req.speed_kmh, max_leg_km=req.max_leg_km, grid_s=req.grid_minutes * 60.0,
         max_wait_s=req.max_wait_hours * 3600.0, horizon_s=req.horizon_hours * 3600.0,
         w_dist=w.distance, w_dark=w.darkness, w_earth=w.earth_invisible,
         dist_scale_km=req.distance_scale_km, exp_scale_h=req.exposure_scale_hours,
         eph_step_s=eph_step_for(req.grid_minutes * 60.0),
     )
+
+
+def is_start_at_destination(req) -> bool:
+    a = unit_vector(float(req.start.lat_deg), 0.0 if abs(req.start.lat_deg) >= 90 else float(req.start.lon_deg))
+    b = unit_vector(float(req.destination.lat_deg),
+                    0.0 if abs(req.destination.lat_deg) >= 90 else float(req.destination.lon_deg))
+    return gc_distance_km(a, b) < config.ROUTE_COINCIDENT_KM
+
+
+def run_route(req, provider: EphemerisProvider, coverage: Optional[tuple[float, float, str, str]] = None) -> dict:
+    """Plan a route. Returns plain Python structures; routing_service converts to response models."""
+    t_start = time.perf_counter()
+    if is_start_at_destination(req):
+        bases = build_bases(req.start, [], req.destination, allow_start_at_destination=True)
+        p = params_from(req)
+        ctx = Context(bases, p, None)
+        et0 = provider.utc_to_et(req.departure_utc)
+        if coverage is not None and (et0 < coverage[0] or et0 + 2 * p.eph_step_s > coverage[1]):
+            raise RoutingError(f"The planning window must lie within the loaded kernel coverage "
+                               f"({coverage[2]} to {coverage[3]}).")
+        ctx.table = EphemerisTable(provider, et0, p.eph_step_s, 2)
+        ev = _zero_distance(ctx)
+        graph = SearchResult(ev.schedule, 0.0, 0, 0, 0, 0, 0)
+        return dict(
+            ctx=ctx, legs=[], work=dict(n_steps=0, n_ephemeris_epochs=2, estimated_sample_evals=1), graph=graph,
+            graph_eval=ev, final=ev, baseline=ev, direct=dict(distance_km=0.0, feasible=True, reason=None, evaluation=ev),
+            ls=dict(performed=False, seeds=[], accepted=[], evaluations=0,
+                    explanation="Start is already at the destination; no search was needed."),
+            reason=None, et0=et0, zero=True, compute_ms=(time.perf_counter() - t_start) * 1000.0,
+        )
+    bases = build_bases(req.start, req.waypoints, req.destination)
+    if len(bases) > config.ROUTE_MAX_BASES:
+        raise RoutingError(f"{len(bases)} bases exceeds the limit of {config.ROUTE_MAX_BASES}")
+    p = params_from(req)
     ctx = Context(bases, p, None)
     legs, work = estimate_and_check(ctx)
 
@@ -829,7 +882,7 @@ def run_route(req, provider: EphemerisProvider, coverage: Optional[tuple[float, 
     reason = None if final is not None else infeasibility_reason(ctx, legs)
     return dict(
         ctx=ctx, legs=legs, work=work, graph=graph, graph_eval=graph_eval, final=final, baseline=baseline,
-        direct=direct, ls=ls_info, reason=reason, et0=et0,
+        direct=direct, ls=ls_info, reason=reason, et0=et0, zero=False,
         compute_ms=(time.perf_counter() - t_start) * 1000.0,
     )
 

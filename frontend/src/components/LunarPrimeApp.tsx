@@ -78,8 +78,8 @@ export default function LunarPrimeApp() {
   const [index, setIndex] = useState(0);
   const [picking, setPicking] = useState<"A" | "B" | null>(null);
   const [view, setView] = useState<{ name: GlobeView; nonce: number }>({ name: "near", nonce: 0 });
-  const [tab, setTab] = useState<"compare" | "route">("compare");
-  const [routeMounted, setRouteMounted] = useState(false);
+  const [tab, setTab] = useState<"compare" | "route">("route");
+  const [routeMounted, setRouteMounted] = useState(true);
   const abortRef = useRef<AbortController | null>(null);
   const autoRan = useRef(false);
 
@@ -117,10 +117,7 @@ export default function LunarPrimeApp() {
     fetchHealth(ac.signal)
       .then((h) => {
         setHealth(h);
-        if (h.spice_available && !autoRan.current) {
-          autoRan.current = true;
-          run(buildRequest(DEFAULT_SITES.map(presetDraft), { start: "2026-12-01T00:00", durationDays: "29.53", stepMinutes: 30, mode: "spice" }));
-        }
+        void h;
       })
       .catch((e) => {
         if ((e as Error).name !== "AbortError") setHealthError((e as Error).message);
@@ -180,8 +177,8 @@ export default function LunarPrimeApp() {
           <div role="tablist" aria-label="Mode" className="flex self-center rounded-md border border-line p-0.5">
             {(
               [
-                ["compare", "Compare Sites"],
-                ["route", "Route Planner"],
+                ["route", "Route simulator"],
+                ["compare", "Compare sites"],
               ] as const
             ).map(([t, label]) => (
               <button
@@ -192,6 +189,10 @@ export default function LunarPrimeApp() {
                 onClick={() => {
                   setTab(t);
                   if (t === "route") setRouteMounted(true);
+                  if (t === "compare" && !autoRan.current && health?.spice_available) {
+                    autoRan.current = true;
+                    run(buildRequest(DEFAULT_SITES.map(presetDraft), { start: "2026-12-01T00:00", durationDays: "29.53", stepMinutes: 30, mode: "spice" }));
+                  }
                 }}
                 className={`rounded px-2.5 py-0.5 text-[12px] ${tab === t ? "bg-panel-2 text-text" : "text-muted hover:text-text"}`}
               >
@@ -202,7 +203,7 @@ export default function LunarPrimeApp() {
           <span className="hidden truncate text-[12px] text-muted xl:inline">
             {tab === "compare"
               ? "Lunar site sunlight & direct-to-Earth visibility · geometric, ideal horizon"
-              : "Conceptual south-pole routing on a spherical Moon · geometric exposure"}
+              : "Conceptual routing from anywhere to the South Pole · SPICE Sun/Earth geometry"}
           </span>
         </div>
         <div className={`flex items-center gap-3 ${tab === "compare" ? "" : "hidden"}`}>

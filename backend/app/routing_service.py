@@ -3,6 +3,7 @@ comparison and a deterministic, number-only explanation."""
 
 from __future__ import annotations
 
+import math
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -14,7 +15,7 @@ from .models import KernelOut
 from .narrative import fmt_duration
 from .routing import Evaluation, run_route
 from .routing_models import (
-    AlternativeOut, BaseOut, ComparisonRow, CostBreakdown, ItineraryLegOut, LegOut, LocalSearchOut,
+    AlternativeOut, BaseOut, ComparisonRow, DiagnosticsOut, NetworkOut, CostBreakdown, ItineraryLegOut, LegOut, LocalSearchOut,
     ObjectiveOut, RouteMetadata, RouteMetrics, RoutePlan, RouteRequest, RouteResponse, SearchOut, SegmentOut,
     StopOut, Trajectory,
 )
@@ -59,7 +60,7 @@ def _plan(res: dict, ev: Evaluation, provider: EphemerisProvider, with_traj: boo
     sch = ev.schedule
     stops, t = [], 0.0
     move_segs = [s for s in ev.segments if s["kind"] == "move"]
-    for i, b in enumerate(sch.stops):
+    for i, b in enumerate(sch.stops if not ev.zero else []):
         arrive = None if i == 0 else move_segs[i - 1]["end_s"]
         if i < len(sch.waits):
             dep = move_segs[i]["start_s"]
@@ -69,6 +70,11 @@ def _plan(res: dict, ev: Evaluation, provider: EphemerisProvider, with_traj: boo
         else:
             stops.append(StopOut(order=i, base_id=B[b].id, arrive_utc=utc(arrive), depart_utc=None, wait_s=0.0,
                                  alignment_wait_s=0.0))
+    if ev.zero:
+        stops = [StopOut(order=0, base_id=B[sch.stops[0]].id, arrive_utc=None, depart_utc=utc(0.0), wait_s=0.0,
+                         alignment_wait_s=0.0),
+                 StopOut(order=1, base_id=B[sch.stops[1]].id, arrive_utc=utc(0.0), depart_utc=None, wait_s=0.0,
+                         alignment_wait_s=0.0)]
     cb = ctx.breakdown(ev.distance_km, ev.dark_s, ev.earth_s)
     metrics = RouteMetrics(
         distance_km=round(ev.distance_km, 3), departure_utc=utc(0.0), arrival_utc=utc(ev.arrival_s),
@@ -129,6 +135,8 @@ def _explain(status, reason, opt: Optional[RoutePlan], base: Optional[RoutePlan]
              res: dict) -> list[str]:
     if status == "infeasible":
         return [reason or "No feasible route within these constraints."]
+    if res.get("zero"):
+        return ["The start is already at the destination: a zero-distance, zero-duration itinerary."]
     m = opt.metrics
     out = []
     inter = [v for v in opt.visited[1:-1]]
@@ -175,6 +183,8 @@ def build_response(req: RouteRequest, provider: EphemerisProvider) -> RouteRespo
     if provider.mode == "spice":
         st = kernels.STATUS
         coverage = (st.coverage_start_et, st.coverage_end_et, st.coverage_start_utc, st.coverage_end_utc)
+    from .route_network import prepare_request
+    req, net = prepare_request(req)  # pure geometry; may raise RoutingError (422) before any ephemeris work
     res = run_route(req, provider, coverage)
     ctx = res["ctx"]
     final, baseline_ev = res["final"], res["baseline"]
@@ -243,7 +253,8 @@ def build_response(req: RouteRequest, provider: EphemerisProvider) -> RouteRespo
     return RouteResponse(
         status=status,
         reason=res["reason"],
-        bases=[BaseOut(id=b.id, label=b.label, lat_deg=b.lat, lon_deg=b.lon, role=b.role) for b in ctx.bases],
+        bases=[BaseOut(id=b.id, label=b.label, lat_deg=b.lat, lon_deg=b.lon, role=b.role, kind=_kind(b.label))
+               for b in ctx.bases],
         candidate_legs=[LegOut(from_id=ctx.bases[leg.a].id, to_id=ctx.bases[leg.b].id, distance_km=round(leg.dist_km, 3))
                         for leg in res["legs"]],
         route=route,
@@ -259,4 +270,41 @@ def build_response(req: RouteRequest, provider: EphemerisProvider) -> RouteRespo
             computed_at_utc=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             conventions=conventions, limitations=config.ROUTE_LIMITATIONS, kernels=kl, toolkit_version=toolkit,
         ),
+        network=NetworkOut(**net),
+        diagnostics=_diagnostics(res, status),
     )
+
+
+def _kind(label: str) -> str:
+    if label.startswith("Planning waypoint"):
+        return "planning"
+    if label.startswith("Catalogue site:"):
+        return "catalog"
+    return "user"
+
+
+def _diagnostics(res: dict, status: str) -> DiagnosticsOut:
+    ctx = res["ctx"]
+    p = ctx.p
+    gc = ctx.distance(ctx.start, ctx.dest)
+    lb = gc / p.speed_kmh
+    binding = suggestion = None
+    if status == "infeasible":
+        reason = res["reason"] or ""
+        if lb > p.horizon_s / 3600 + 1e-9:
+            binding = "horizon"
+            suggestion = (f"Increase speed to at least {gc / (p.horizon_s / 3600):.2f} km/h, or the horizon to at least "
+                          f"{min(config.ROUTE_MAX_HORIZON_HOURS, math.ceil(lb * 1.1)):g} h.")
+        elif "cannot be reached" in reason:
+            binding = "max_leg_km"
+            suggestion = ("Enable the automatic planning network, add waypoints, or increase the maximum leg "
+                          f"above {p.max_leg_km:g} km.")
+        elif "shortest network route" in reason:
+            binding = "horizon"
+            suggestion = "Increase the horizon or speed; the network detour exceeds the time available."
+        else:
+            binding = "max_wait_hours"
+            suggestion = (f"Increase the per-stop waiting limit above {p.max_wait_s / 3600:g} h or use a finer "
+                          "time grid so grid-alignment waits fit.")
+    return DiagnosticsOut(great_circle_km=round(gc, 3), min_travel_hours=round(lb, 3),
+                          horizon_hours=p.horizon_s / 3600, binding_constraint=binding, suggestion=suggestion)

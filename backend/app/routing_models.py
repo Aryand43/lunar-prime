@@ -67,6 +67,10 @@ class RouteRequest(BaseModel):
     distance_scale_km: FiniteFloat = Field(100.0, gt=0.0, le=1e5)
     exposure_scale_hours: FiniteFloat = Field(24.0, gt=0.0, le=1e5)
     local_search: bool = True
+    auto_network: bool = Field(False, description="Generate planning-waypoint corridors from start to destination")
+    include_catalog_sites: bool = Field(False, description="Add catalogue mission sites near the corridor as candidates")
+    planning_mode: Literal["exact", "coarse"] = Field(
+        "exact", description="coarse = single corridor and, if needed, a coarser time grid (reported)")
     mode: Literal["spice", "synthetic"] = "spice"
 
     @field_validator("departure_utc")
@@ -100,6 +104,7 @@ class BaseOut(BaseModel):
     lat_deg: float
     lon_deg: float
     role: Literal["start", "waypoint", "destination"]
+    kind: Literal["user", "planning", "catalog"] = "user"
 
 
 class LegOut(BaseModel):
@@ -258,6 +263,36 @@ class RouteMetadata(BaseModel):
     toolkit_version: Optional[str]
 
 
+class NetworkOut(BaseModel):
+    generated: bool
+    generator: Optional[str]
+    n_generated: int
+    n_user_waypoints: int
+    n_catalog_sites: int
+    catalog_site_ids: list[str]
+    corridors: int
+    along_spacing_km: Optional[float]
+    lateral_offset_km: Optional[float]
+    planning_mode: Literal["exact", "coarse"]
+    notes: list[str]
+    approximations: list[str]
+
+
+class DiagnosticsOut(BaseModel):
+    great_circle_km: float
+    min_travel_hours: float = Field(..., description="Great-circle distance / speed: a lower bound on travel time")
+    horizon_hours: float
+    binding_constraint: Optional[str]
+    suggestion: Optional[str]
+
+
+class RunRef(BaseModel):
+    run_id: str = Field(..., description="Immutable id of the stored run (for the mission analyst)")
+    input_hash: str
+    result_hash: str
+    parent_run_id: Optional[str] = None
+
+
 class RouteResponse(BaseModel):
     status: Literal["feasible", "infeasible"]
     reason: Optional[str]
@@ -271,3 +306,6 @@ class RouteResponse(BaseModel):
     objective: ObjectiveOut
     search: SearchOut
     metadata: RouteMetadata
+    network: Optional[NetworkOut] = None
+    diagnostics: Optional[DiagnosticsOut] = None
+    run: Optional[RunRef] = None

@@ -1,4 +1,4 @@
-"""FastAPI application: POST /api/compare, GET /api/health."""
+"""FastAPI application: compare, route planner, site catalogue, stored runs and the mission analyst."""
 
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ from .routing import RoutingError
 from .routing_models import RouteRequest, RouteResponse
 from .routing_service import build_response
 from .service import ComputeError, run_compare
+from . import chat_api
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("lunar_prime")
@@ -27,7 +28,9 @@ log = logging.getLogger("lunar_prime")
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     kernels.load_kernels()  # once, at startup
+    chat_api.startup(compute_route)
     yield
+    chat_api.shutdown()
 
 
 app = FastAPI(
@@ -39,8 +42,8 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=os.environ.get("LUNAR_PRIME_CORS", "http://localhost:3000,http://127.0.0.1:3000").split(","),
-    allow_methods=["GET", "POST"],
-    allow_headers=["content-type"],
+    allow_methods=["GET", "POST", "DELETE"],
+    allow_headers=["content-type", "x-session-token"],
 )
 
 
@@ -107,24 +110,83 @@ def compare(req: CompareRequest):
         return _error(500, "spice_error", f"SPICE computation failed: {exc.short or exc}")
 
 
-@app.post("/api/route", response_model=RouteResponse, responses={422: {}, 503: {}})
-def route(req: RouteRequest):
-    """South Pole Route Planner. A valid request with no route returns 200 with status 'infeasible'."""
+@app.get("/api/sites")
+def sites():
+    """Source-cited site catalogue. Not derived from SPICE; no site implies infrastructure."""
+    from .site_catalog import load
+    return load()
+
+
+@app.post("/api/route/preflight")
+def route_preflight(req: RouteRequest):
+    """Distance, travel-time lower bound and work estimate. Pure geometry: no SPICE, no search."""
+    from .route_network import preflight
+    try:
+        return preflight(req)
+    except RoutingError as exc:
+        return _error(422, "invalid_request", str(exc))
+
+
+def compute_route(req: RouteRequest, parent_run_id: str | None = None) -> tuple[int, dict]:
+    """Shared by POST /api/route and approved analyst comparisons: identical limits and SPICE handling.
+
+    The SPICE lock is held only around the computation, never during persistence, indexing or LLM calls.
+    """
     if req.mode == "spice":
         if not kernels.STATUS.loaded:  # never fall back to synthetic silently
-            return _error(
-                503, "spice_unavailable",
+            return 503, _err_body(
+                "spice_unavailable",
                 (kernels.STATUS.error or "SPICE kernels are not loaded.")
-                + " Synthetic demo mode is available for UI development, but its results are not scientific.",
-            )
+                + " Synthetic demo mode is available for UI development, but its results are not scientific.")
         provider = SpiceProvider()
     else:
         provider = SyntheticProvider()
     try:
         with kernels.SPICE_LOCK:  # one acquisition; routing code never takes the lock itself
-            return build_response(req, provider)
+            resp = build_response(req, provider)
     except RoutingError as exc:
-        return _error(422, "invalid_request", str(exc))
+        return 422, _err_body("invalid_request", str(exc))
     except SpiceyError as exc:
         log.exception("SPICE error")
-        return _error(500, "spice_error", f"SPICE computation failed: {exc.short or exc}")
+        return 500, _err_body("spice_error", f"SPICE computation failed: {exc.short or exc}")
+    body = resp.model_dump(mode="json")
+    try:
+        from .persistence import get_store
+        ref = get_store().save_run(req.model_dump(mode="json"), body, parent_run_id)
+        body["run"] = dict(ref, parent_run_id=parent_run_id)
+        chat_api.index_run_async(ref["run_id"])
+    except Exception:  # persistence must never break routing
+        log.warning("could not persist run", exc_info=False)
+    return 200, body
+
+
+def _err_body(code: str, message: str) -> dict:
+    return {"error": {"code": code, "message": message, "details": []}}
+
+
+@app.post("/api/route", response_model=RouteResponse, responses={422: {}, 503: {}})
+def route(req: RouteRequest, request: Request):
+    """South Pole Route Planner. A valid request with no route returns 200 with status 'infeasible'."""
+    if not chat_api.ROUTE_LIMITER.allow(chat_api.client_key(request)):
+        return _error(429, "rate_limited", "Too many route requests; wait a moment and retry.")
+    code, body = compute_route(req)
+    return JSONResponse(status_code=code, content=body)
+
+
+@app.get("/api/runs/{run_id}")
+def get_run(run_id: str, full: bool = False):
+    """Stored run metadata and request (immutable). The full response is included with ?full=1."""
+    from .persistence import get_store
+    run = get_store().get_run(run_id) if run_id.startswith("run_") and len(run_id) == 20 else None
+    if run is None:
+        return _error(404, "not_found", "Run not found.")
+    out = {k: run[k] for k in ("run_id", "created_at", "mode", "status", "input_hash", "result_hash",
+                               "parent_run_id", "request")}
+    if full:
+        out["response"] = dict(run["response"], run=dict(run_id=run["run_id"], input_hash=run["input_hash"],
+                                                         result_hash=run["result_hash"],
+                                                         parent_run_id=run["parent_run_id"]))
+    return out
+
+
+app.include_router(chat_api.router)
