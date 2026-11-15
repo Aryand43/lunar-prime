@@ -17,8 +17,14 @@ mkdir -p "$DEST/validation"
 fetch() {  # url dest
   local url="$1" out="$2" name; name="$(basename "$out")"
   if [[ -s "$out" ]]; then echo "ok       $name"; return; fi
-  echo "fetching $name"
-  curl -fL --retry 3 --connect-timeout 20 --progress-bar -o "$out.part" "$url"
+  echo "fetching $name"; [[ -s "$out.part" ]] && echo "  resuming from $(( $(wc -c < "$out.part") / 1048576 )) MB"
+  # Resume a partial download (-C -). If the transfer stalls (under 1 KB/s for 30 s, e.g. after a Wi-Fi
+  # change), curl gives up and the loop tries again from where it stopped, up to 20 times.
+  local n=0
+  until curl -fL -C - --connect-timeout 20 --speed-limit 1024 --speed-time 30 --progress-bar -o "$out.part" "$url"; do
+    n=$((n + 1)); [[ $n -ge 20 ]] && { echo "Giving up on $name after $n attempts; run the script again later."; exit 1; }
+    echo "  connection dropped; resuming ($n)..."; sleep 3
+  done
   mv "$out.part" "$out"
 }
 
@@ -34,5 +40,5 @@ if [[ "${1:-}" != "--no-validation" ]]; then
   done
 fi
 
-( cd "$DEST" && shasum -a 256 *.TIF validation/* > SHA256SUMS.local )
+( cd "$DEST" && shopt -s nullglob && shasum -a 256 *.TIF validation/* > SHA256SUMS.local )
 echo "Done. Checksums in backend/terrain/SHA256SUMS.local"
