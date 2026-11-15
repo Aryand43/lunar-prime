@@ -11,7 +11,6 @@ import HorizonView from "./HorizonView";
 import type { GlobeView } from "./MoonGlobe";
 import { WHY_THIS_MATTERS } from "@/lib/explain";
 import { Findings, Headline, MethodsPanel, MetricsTable, WindowsList } from "./Results";
-import RoutePlanner from "./RoutePlanner";
 import Scrubber from "./Scrubber";
 import Timelines from "./Timelines";
 
@@ -79,8 +78,6 @@ export default function LunarPrimeApp() {
   const [index, setIndex] = useState(0);
   const [picking, setPicking] = useState<"A" | "B" | null>(null);
   const [view, setView] = useState<{ name: GlobeView; nonce: number }>({ name: "near", nonce: 0 });
-  const [tab, setTab] = useState<"compare" | "route">("compare");
-  const [routeMounted, setRouteMounted] = useState(false);
   const [explain, setExplain] = useState(true);
   const [lightFor, setLightFor] = useState<0 | 1>(0);
   const abortRef = useRef<AbortController | null>(null);
@@ -183,30 +180,8 @@ export default function LunarPrimeApp() {
       <header className="sticky top-0 z-40 flex h-14 items-center justify-between gap-3 border-b border-line bg-bg px-6">
         <div className="flex min-w-0 items-center gap-6">
           <h1 className="text-[18px] font-bold">Lunar Prime</h1>
-          <div role="tablist" aria-label="Mode" className="flex gap-1">
-            {(
-              [
-                ["compare", "Compare sites"],
-                ["route", "Route planner"],
-              ] as const
-            ).map(([t, label]) => (
-              <button
-                key={t}
-                type="button"
-                role="tab"
-                aria-selected={tab === t}
-                onClick={() => {
-                  setTab(t);
-                  if (t === "route") setRouteMounted(true);
-                }}
-                className={`rounded-[2px] border px-3 py-1 text-[14px] ${tab === t ? "border-text bg-text font-bold text-bg" : "border-line text-text hover:bg-field"}`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
         </div>
-        <div className={`flex items-center gap-3 ${tab === "compare" ? "" : "hidden"}`}>
+        <div className="flex items-center gap-3">
           <button
             type="button"
             role="switch"
@@ -231,13 +206,13 @@ export default function LunarPrimeApp() {
         </div>
       </header>
 
-      {synthetic && tab === "compare" && (
+      {synthetic && (
         <div role="alert" className="border-b border-text bg-field px-6 py-2 text-[13px] text-text">
           <b>Synthetic demo mode.</b> Values come from a crude analytic model for UI development. They are not SPICE results and not NASA data.
         </div>
       )}
 
-      <div className={tab === "compare" ? "grid flex-1 grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)]" : "hidden"}>
+      <div className="grid flex-1 grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)]">
         <aside className="space-y-8 border-b border-line p-6 lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto lg:border-r lg:border-b-0">
           {sites.map((s, k) => (
             <SiteCard
@@ -332,7 +307,7 @@ export default function LunarPrimeApp() {
 
           <div className="grid grid-cols-1 gap-8 border-b border-line pb-10 xl:grid-cols-[560px_minmax(0,1fr)]">
             <div className="relative h-[420px] overflow-hidden bg-space sm:h-[520px] xl:h-[620px]">
-              <MoonGlobe sites={globeSites} subsolar={subsolar} subEarth={subEarth} picking={picking} onPick={onPick} view={view} active={tab === "compare"} />
+              <MoonGlobe sites={globeSites} subsolar={subsolar} subEarth={subEarth} picking={picking} onPick={onPick} view={view} />
               <div className="pointer-events-none absolute inset-x-0 top-0 flex flex-wrap items-start justify-between gap-2 p-3">
                 <div className="pointer-events-auto flex gap-1" role="group" aria-label="Globe view">
                   {(["near", "far", "south", "north"] as GlobeView[]).map((v) => (
@@ -450,11 +425,6 @@ export default function LunarPrimeApp() {
           </div>
         </main>
       </div>
-      {routeMounted && (
-        <div className={tab === "route" ? "flex flex-1 flex-col" : "hidden"}>
-          <RoutePlanner active={tab === "route"} />
-        </div>
-      )}
       <EscHandler onEsc={() => setPicking(null)} />
     </div>
   );

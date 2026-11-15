@@ -8,28 +8,15 @@ import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 
 import { latLonToVec3, vec3ToLatLon } from "@/lib/geo";
 
-export type MarkerKind = "site" | "start" | "visited" | "candidate" | "destination";
-
 export interface GlobeSite {
-  /** Short tag shown in bold on the label (e.g. "A", "1", "S"). */
+  /** Site letter shown in the disc ("A" or "B"). */
   letter: string;
   label: string;
   lat: number;
   lon: number;
-  kind?: MarkerKind;
-  key?: string;
 }
 
-export interface GlobePath {
-  key: string;
-  /** three.js world coordinates (use greatCircleArc from lib/geo). */
-  points: [number, number, number][];
-  color: string;
-  dashed?: boolean;
-  opacity?: number;
-}
-
-export type GlobeView = "near" | "far" | "south" | "north" | "polar";
+export type GlobeView = "near" | "far" | "south" | "north";
 
 interface Props {
   sites: GlobeSite[];
@@ -38,13 +25,7 @@ interface Props {
   picking: string | null;
   onPick: (lat: number, lon: number) => void;
   view: { name: GlobeView; nonce: number };
-  paths?: GlobePath[];
-  rover?: { lat: number; lon: number } | null;
-  /** Close-up mode for small regions (smaller markers, closer zoom limit). */
-  compact?: boolean;
-  /** Extra ambient light (illustrative shading only). */
-  ambient?: number;
-  /** Pause rendering when the globe is hidden (e.g. inactive tab). */
+  /** Pause rendering when the globe is hidden. */
   active?: boolean;
 }
 
@@ -53,7 +34,7 @@ type Vec3 = [number, number, number];
 interface Anchor {
   key: string;
   pos: Vec3;
-  kind: MarkerKind | "sun" | "earth" | "rover";
+  kind: "site" | "sun" | "earth";
   letter?: string;
   text: string;
 }
@@ -63,17 +44,9 @@ const VIEW_POS: Record<GlobeView, Vec3> = {
   far: [-3.9, 0.5, 0.0],
   south: [0.5, -3.9, 0.15],
   north: [0.5, 3.9, 0.15],
-  polar: [0.004, -1.36, 0.0], // just off the pole axis so "up" on screen points toward 0 deg E
 };
 
 const GLYPH_R = 1.28;
-const MARKER_COLOR: Record<MarkerKind, string> = {
-  site: "#ffffff",
-  start: "#ffffff",
-  visited: "#FFFFFF",
-  candidate: "#9AA3AD",
-  destination: "#FFFFFF",
-};
 
 /** True if the straight segment camera -> p passes through the unit sphere (the Moon). */
 function occludedBySphere(cam: THREE.Vector3, p: Vec3) {
@@ -131,7 +104,7 @@ function Moon({ picking, onPick }: { picking: boolean; onPick: Props["onPick"] }
   );
 }
 
-function Graticule({ polar }: { polar: boolean }) {
+function Graticule() {
   const geom = useMemo(() => {
     const pts: number[] = [];
     const r = 1.0015;
@@ -142,67 +115,15 @@ function Graticule({ polar }: { polar: boolean }) {
     for (let lon = -180; lon < 180; lon += 30) {
       for (let lat = -87; lat < 87; lat += 3) push(latLonToVec3(lat, lon, r), latLonToVec3(lat + 3, lon, r));
     }
-    if (polar) {
-      // 1-degree latitude rings and 30-degree meridians close to both poles
-      for (const sgn of [-1, 1]) {
-        for (let c = 1; c <= 6; c++) {
-          const lat = sgn * (90 - c);
-          for (let lon = -180; lon < 180; lon += 2) push(latLonToVec3(lat, lon, r), latLonToVec3(lat, lon + 2, r));
-        }
-        for (let lon = -180; lon < 180; lon += 30) push(latLonToVec3(sgn * 84, lon, r), latLonToVec3(sgn * 90, lon, r));
-      }
-    }
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
     return g;
-  }, [polar]);
+  }, []);
   return (
     <lineSegments geometry={geom}>
-      <lineBasicMaterial color="#9aa3ad" transparent opacity={polar ? 0.16 : 0.1} depthWrite={false} />
+      <lineBasicMaterial color="#9aa3ad" transparent opacity={0.1} depthWrite={false} />
     </lineSegments>
   );
-}
-
-function SiteMarker({ site, compact }: { site: GlobeSite; compact: boolean }) {
-  const stemR = compact ? 1.006 : 1.05;
-  const size = compact ? (site.kind === "destination" ? 0.0035 : 0.0024) : 0.012;
-  const color = MARKER_COLOR[site.kind ?? "site"];
-  const geom = useMemo(() => {
-    const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.Float32BufferAttribute([...latLonToVec3(site.lat, site.lon, 1.0), ...latLonToVec3(site.lat, site.lon, stemR)], 3));
-    return g;
-  }, [site.lat, site.lon, stemR]);
-  return (
-    <group>
-      <lineSegments geometry={geom}>
-        <lineBasicMaterial color={color} />
-      </lineSegments>
-      <mesh position={latLonToVec3(site.lat, site.lon, stemR)}>
-        <sphereGeometry args={[size, 16, 16]} />
-        <meshBasicMaterial color={color} />
-      </mesh>
-    </group>
-  );
-}
-
-function PathLine({ path }: { path: GlobePath }) {
-  const line = useMemo(() => {
-    const g = new THREE.BufferGeometry().setFromPoints(path.points.map((p) => new THREE.Vector3(...p)));
-    const m = path.dashed
-      ? new THREE.LineDashedMaterial({ color: path.color, dashSize: 0.004, gapSize: 0.003, transparent: true, opacity: path.opacity ?? 1 })
-      : new THREE.LineBasicMaterial({ color: path.color, transparent: true, opacity: path.opacity ?? 1 });
-    const l = new THREE.Line(g, m);
-    if (path.dashed) l.computeLineDistances();
-    return l;
-  }, [path]);
-  useEffect(
-    () => () => {
-      line.geometry.dispose();
-      (line.material as THREE.Material).dispose();
-    },
-    [line],
-  );
-  return <primitive object={line} />;
 }
 
 /** Day-night boundary: the great circle perpendicular to the subsolar direction. */
@@ -237,25 +158,21 @@ function CameraRig({ view }: { view: Props["view"] }) {
   return null;
 }
 
-export default function MoonGlobe({
-  sites, subsolar, subEarth, picking, onPick, view, paths = [], rover = null, compact = false, ambient, active = true,
-}: Props) {
+export default function MoonGlobe({ sites, subsolar, subEarth, picking, onPick, view, active = true }: Props) {
   const labelEls = useRef<Record<string, HTMLDivElement | null>>({});
   const sunPos: Vec3 = subsolar ? latLonToVec3(subsolar.lat, subsolar.lon, 10) : [5, 2, 5];
-  const stemR = compact ? 1.006 : 1.05;
-  const amb = ambient ?? (subsolar ? 0.14 : 0.6);
+  const amb = subsolar ? 0.14 : 0.6;
 
   const anchors: Anchor[] = [
     ...sites.map((s, i) => ({
-      key: `site-${s.key ?? s.letter + i}`,
-      pos: latLonToVec3(s.lat, s.lon, (s.kind ?? "site") === "site" ? 1.0 : stemR),
-      kind: s.kind ?? ("site" as const),
+      key: `site-${s.letter}${i}`,
+      pos: latLonToVec3(s.lat, s.lon, 1.0),
+      kind: "site" as const,
       letter: s.letter,
       text: s.label,
     })),
-    ...(subsolar && !compact ? [{ key: "sun", pos: latLonToVec3(subsolar.lat, subsolar.lon, GLYPH_R), kind: "sun" as const, text: "Subsolar point" }] : []),
-    ...(subEarth && !compact ? [{ key: "earth", pos: latLonToVec3(subEarth.lat, subEarth.lon, GLYPH_R), kind: "earth" as const, text: "Sub-Earth point" }] : []),
-    ...(rover ? [{ key: "rover", pos: latLonToVec3(rover.lat, rover.lon, 1.004), kind: "rover" as const, text: "Rover" }] : []),
+    ...(subsolar ? [{ key: "sun", pos: latLonToVec3(subsolar.lat, subsolar.lon, GLYPH_R), kind: "sun" as const, text: "Subsolar point" }] : []),
+    ...(subEarth ? [{ key: "earth", pos: latLonToVec3(subEarth.lat, subEarth.lon, GLYPH_R), kind: "earth" as const, text: "Sub-Earth point" }] : []),
   ];
 
   return (
@@ -273,43 +190,21 @@ export default function MoonGlobe({
         <Suspense fallback={null}>
           <Moon picking={picking !== null} onPick={onPick} />
         </Suspense>
-        <Graticule polar={compact} />
-        {sites
-          .filter((s) => (s.kind ?? "site") !== "site")
-          .map((s, i) => (
-            <SiteMarker key={s.key ?? s.letter + i} site={s} compact={compact} />
-          ))}
+        <Graticule />
         {subsolar && <Terminator subsolar={subsolar} />}
-        {paths.map((p) => (
-          <PathLine key={p.key} path={p} />
-        ))}
-        {rover && (
-          <mesh position={latLonToVec3(rover.lat, rover.lon, 1.004)}>
-            <sphereGeometry args={[compact ? 0.003 : 0.012, 20, 20]} />
-            <meshBasicMaterial color="#FFFFFF" />
-          </mesh>
-        )}
-        {subsolar && !compact && (
+        {subsolar && (
           <mesh position={latLonToVec3(subsolar.lat, subsolar.lon, GLYPH_R)}>
             <sphereGeometry args={[0.022, 16, 16]} />
             <meshBasicMaterial color="#F2B200" />
           </mesh>
         )}
-        {subEarth && !compact && (
+        {subEarth && (
           <mesh position={latLonToVec3(subEarth.lat, subEarth.lon, GLYPH_R)}>
             <sphereGeometry args={[0.022, 16, 16]} />
             <meshBasicMaterial color="#2F6FDE" />
           </mesh>
         )}
-        <OrbitControls
-          makeDefault
-          enablePan={false}
-          minDistance={compact ? 1.03 : 1.6}
-          maxDistance={8}
-          rotateSpeed={compact ? 0.25 : 0.6}
-          zoomSpeed={compact ? 0.6 : 1}
-          enableDamping
-        />
+        <OrbitControls makeDefault enablePan={false} minDistance={1.6} maxDistance={8} rotateSpeed={0.6} zoomSpeed={1} enableDamping />
         <CameraRig view={view} />
         <LabelProjector anchors={anchors} els={labelEls} />
       </Canvas>
@@ -329,23 +224,12 @@ export default function MoonGlobe({
                 <span className="inline-block h-2 w-2 rounded-full" style={{ background: a.kind === "sun" ? "#F2B200" : "#2F6FDE" }} />
                 {a.text}
               </div>
-            ) : a.kind === "rover" ? (
-              <div className="ml-2 -translate-y-1/2 whitespace-nowrap rounded-[2px] bg-black/70 px-1.5 py-0.5 text-[12px] font-bold text-white">{a.text}</div>
-            ) : a.kind === "site" ? (
+            ) : (
               <div className="flex -translate-x-[11px] -translate-y-1/2 items-center gap-1.5 whitespace-nowrap">
                 <span className="flex h-[22px] w-[22px] items-center justify-center rounded-full border-2 border-black bg-white text-[13px] font-bold text-black">
                   {a.letter}
                 </span>
                 <span className="rounded-[2px] bg-black/70 px-1.5 py-0.5 text-[13px] text-white">{a.text}</span>
-              </div>
-            ) : (
-              <div
-                className={`ml-2 -translate-y-1/2 whitespace-nowrap rounded-[2px] border bg-black/70 px-1.5 py-0.5 text-[12px] leading-tight ${
-                  a.kind === "candidate" ? "border-white/10 text-[#9AA3AD]" : "border-white/40 text-white"
-                }`}
-              >
-                <span className="mr-1 font-bold">{a.letter}</span>
-                <span className={a.kind === "candidate" ? "text-[#9AA3AD]" : "text-[#D9DAD8]"}>{a.text}</span>
               </div>
             )}
           </div>
