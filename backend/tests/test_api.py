@@ -1,6 +1,6 @@
 import pytest
 
-from tests.conftest import APOLLO11, CHANGE4, SHACKLETON
+from tests.conftest import APOLLO11, CHANGE4, SHACKLETON, site
 
 
 def req(**kw):
@@ -20,7 +20,7 @@ def test_health(client):
     ({"sites": [dict(APOLLO11, lat_deg=91), SHACKLETON]}, "sites.0.lat_deg"),
     ({"sites": [APOLLO11, dict(SHACKLETON, lon_deg=-200)]}, "sites.1.lon_deg"),
     ({"sites": [APOLLO11, dict(APOLLO11, label="x")]}, None),  # duplicate id
-    ({"sites": [APOLLO11]}, "sites"),
+    ({"sites": [APOLLO11, SHACKLETON, CHANGE4, dict(APOLLO11, id="a2"), dict(APOLLO11, id="a3")]}, "sites"),  # > 4
     ({"start_utc": "2026-12-01T00:00:00"}, "start_utc"),  # naive time
     ({"start_utc": "2026-12-01T00:00:00+05:00"}, "start_utc"),
     ({"start_utc": "not a date"}, "start_utc"),
@@ -91,3 +91,14 @@ def test_synthetic_mode_is_labelled(client):
     assert r.status_code == 200
     md = r.json()["metadata"]
     assert md["mode"] == "synthetic" and "SYNTHETIC" in md["provenance"] and md["kernels"] == []
+
+
+def test_compare_one_to_four_sites(client):
+    base = {"start_utc": "2027-02-01T00:00:00Z", "duration_hours": 48, "step_minutes": 60, "mode": "synthetic"}
+    four = [site(f"s{i}", f"Site {i}", -80 + i, 10 * i) for i in range(4)]
+    for n in (1, 3, 4):
+        r = client.post("/api/compare", json=dict(base, sites=four[:n]))
+        assert r.status_code == 200, r.text
+        assert len(r.json()["sites"]) == n
+    assert client.post("/api/compare", json=dict(base, sites=four + [site("s9", "x", 0, 0)])).status_code == 422
+    assert client.post("/api/compare", json=dict(base, sites=[four[0], four[0]])).status_code == 422

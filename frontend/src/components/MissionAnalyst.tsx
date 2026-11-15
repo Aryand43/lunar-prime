@@ -193,7 +193,8 @@ export default function MissionAnalyst({
   };
 
   const disabled = status !== null && !status.enabled;
-  const liveText = streaming?.text.replace(/\[ref:[^\]]*\]?/g, "") ?? "";
+  // Hide raw citation markers while streaming (they may contain one level of brackets).
+  const liveText = streaming?.text.replace(/\[ref:(?:[^[\]\s]|\[[^[\]]*\])*\]?/g, "") ?? "";
 
   return (
     <aside aria-label="Mission analyst" className="flex h-full min-h-0 flex-col bg-panel">

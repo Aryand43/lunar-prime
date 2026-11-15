@@ -57,6 +57,7 @@ function buildRequest(start: StartValue, dest: BaseDraft, wps: BaseDraft[], p: P
     auto_network: p.autoNetwork,
     include_catalog_sites: p.includeCatalog,
     planning_mode: p.planningMode,
+    auto_fit: p.autoFit,
     mode: p.mode,
   };
 }
@@ -146,6 +147,58 @@ function PlaybackBar({ res, index, onIndex, live, playing, setPlaying }: {
         <span className={tr.sun_el_deg[index] > 0 ? "text-sun" : "text-faint"} title="Sun centre elevation">☉ {tr.sun_el_deg[index].toFixed(1)}°</span>
         <span className={tr.earth_el_deg[index] > 0 ? "text-earth" : "text-faint"} title="Earth centre elevation">⊕ {tr.earth_el_deg[index].toFixed(1)}°</span>
       </div>
+    </div>
+  );
+}
+
+/** Sun-visible and Earth-visible windows along the returned trajectory (body centre above the ideal horizon). */
+function VisibilityStrip({ tr, index, onIndex }: { tr: NonNullable<NonNullable<RouteResponse["route"]>["trajectory"]>; index: number; onIndex: (i: number) => void }) {
+  const total = tr.elapsed_s[tr.elapsed_s.length - 1] || 1;
+  const runs = (el: number[]) => {
+    const out: [number, number][] = [];
+    let s0: number | null = null;
+    el.forEach((e, k) => {
+      if (e > 0 && s0 === null) s0 = tr.elapsed_s[k];
+      if (e <= 0 && s0 !== null) { out.push([s0, tr.elapsed_s[k]]); s0 = null; }
+    });
+    if (s0 !== null) out.push([s0, total]);
+    return out;
+  };
+  const sun = useMemo(() => runs(tr.sun_el_deg), [tr]); // eslint-disable-line react-hooks/exhaustive-deps
+  const earth = useMemo(() => runs(tr.earth_el_deg), [tr]); // eslint-disable-line react-hooks/exhaustive-deps
+  const row = (label: string, color: string, data: [number, number][]) => (
+    <div className="flex items-center gap-2">
+      <span className="w-[150px] shrink-0 text-[10.5px] text-muted">{label}</span>
+      <div className="relative h-2.5 flex-1 rounded-sm bg-black/50">
+        {data.map(([a, b]) => (
+          <span key={a} className="absolute inset-y-0 rounded-sm" style={{ left: `${(a / total) * 100}%`, width: `${Math.max(0.3, ((b - a) / total) * 100)}%`, background: color }} />
+        ))}
+        <span className="absolute inset-y-[-2px] w-px bg-white" style={{ left: `${(tr.elapsed_s[index] / total) * 100}%` }} />
+      </div>
+    </div>
+  );
+  return (
+    <div
+      className="cursor-pointer space-y-1"
+      role="slider"
+      tabIndex={0}
+      aria-label="Sun and Earth visibility along the route; click to seek"
+      aria-valuemin={0}
+      aria-valuemax={tr.elapsed_s.length - 1}
+      aria-valuenow={index}
+      onKeyDown={(e) => {
+        if (e.key === "ArrowRight") onIndex(Math.min(tr.elapsed_s.length - 1, index + 1));
+        if (e.key === "ArrowLeft") onIndex(Math.max(0, index - 1));
+      }}
+      onClick={(e) => {
+        const bar = e.currentTarget.querySelector("div > div") as HTMLElement;
+        const b = bar.getBoundingClientRect();
+        onIndex(nearestElapsed(tr.elapsed_s, ((e.clientX - b.left) / b.width) * total));
+      }}
+    >
+      {row("☉ Sun above horizon", "#f2b84b", sun)}
+      {row("⊕ Earth in line of sight", "#6b9cff", earth)}
+      <p className="text-[10px] text-faint">Body centre above an ideal, terrain-free horizon along the route (UTC time axis, sampled ≤ 10 min). Line of sight is not a guaranteed communication link.</p>
     </div>
   );
 }
@@ -511,18 +564,18 @@ export default function RoutePlanner({ active }: { active: boolean }) {
         <StartPicker value={start} rev={startRev} onChange={(v, ext) => (ext ? setStartExternal(v) : setStart(v))} picking={picking === "start"} onTogglePick={() => setPicking((x) => (x === "start" ? null : "start"))} sites={sites} onSelectSite={useSite} />
 
         <div className="flex items-center justify-between rounded border border-line bg-panel px-2 py-1.5 text-[12px]">
-          <span className="text-muted">Destination</span>
+          <span className="text-muted">Destination (fixed)</span>
           <span className="font-mono text-[11px] text-text">{customDest ? `${dest.label} · ${dest.lat}°, ${dest.lon}°` : "South Pole · −90°, 0°"}</span>
         </div>
 
         <label className="block">
-          <span className={labelCls}>Departure (UTC)</span>
+          <span className={labelCls}><span className="text-accent">2</span> · Departure date &amp; time (UTC)</span>
           <input type="datetime-local" step={60} className={inputCls} value={p.departure} aria-invalid={!!pErrs.departure} onChange={(e) => setP({ ...p, departure: e.target.value })} />
           {pErrs.departure && <span className="mt-0.5 block text-[11px] text-danger">{pErrs.departure}</span>}
         </label>
 
         <button type="button" disabled={!request || loading} onClick={() => request && run(request)} className="w-full rounded-md bg-accent px-3 py-2 text-sm font-medium text-black hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40">
-          {loading ? "Optimizing…" : stale ? "Re-optimize" : "Optimize route"}
+          {loading ? "Planning route…" : stale ? "3 · Re-plan route" : "3 · Plan route"}
         </button>
         {invalid && <p className="text-[11px] text-danger">Fix the highlighted fields in Advanced to optimize.</p>}
 
@@ -536,6 +589,12 @@ export default function RoutePlanner({ active }: { active: boolean }) {
               </p>
             )}
             {preflight.work && <p className="font-mono text-faint">{preflight.work.n_bases} nodes · {preflight.work.n_candidate_legs} legs · {preflight.work.time_states.toLocaleString()} states</p>}
+            {(preflight.adjustments?.length ?? 0) > 0 && (
+              <div className="text-sun">
+                <p className="font-medium">Auto-fit will adjust:</p>
+                <ul className="list-disc pl-4">{preflight.adjustments!.map((a) => <li key={a}>{a}</li>)}</ul>
+              </div>
+            )}
             {preflight.binding_constraints.map((b) => <p key={b} className="text-sun">{b}</p>)}
             {preflight.suggestions.map((s) => <p key={s} className="text-muted">→ {s}</p>)}
             {preflight.coarse_available && (
@@ -562,6 +621,7 @@ export default function RoutePlanner({ active }: { active: boolean }) {
             </label>
             <fieldset className="space-y-1.5 text-[12px]">
               <legend className={labelCls}>Network &amp; search</legend>
+              <label className="flex items-start gap-2"><input type="checkbox" checked={p.autoFit} onChange={(e) => setP({ ...p, autoFit: e.target.checked })} className="mt-0.5 accent-[var(--color-accent)]" /><span>Auto-fit constraints to reach the pole <span className="block text-[10.5px] text-faint">Raises horizon, then speed, leg length and grid only as needed; every change is listed.</span></span></label>
               <label className="flex items-center gap-2"><input type="checkbox" checked={p.autoNetwork} onChange={(e) => setP({ ...p, autoNetwork: e.target.checked })} className="accent-[var(--color-accent)]" />Generate planning waypoints</label>
               <label className="flex items-center gap-2"><input type="checkbox" checked={p.includeCatalog} onChange={(e) => setP({ ...p, includeCatalog: e.target.checked })} className="accent-[var(--color-accent)]" />Include catalogue sites near the corridor</label>
               <div role="radiogroup" aria-label="Planning mode" className="flex gap-3">
@@ -613,7 +673,20 @@ export default function RoutePlanner({ active }: { active: boolean }) {
               <button type="button" aria-pressed={follow} disabled={!tr} onClick={() => setFollow((f) => !f)} className={`rounded border px-2 py-0.5 text-[11px] disabled:opacity-40 ${follow ? "border-sun/60 bg-sun/10 text-sun" : "border-line bg-black/60 text-muted hover:text-text"}`}>Follow rover</button>
               <button type="button" onClick={() => { setFollow(false); setView((v) => ({ name: "polar", nonce: v.nonce + 1 })); }} className="rounded border border-line bg-black/60 px-2 py-0.5 text-[11px] text-muted hover:text-text">Pole</button>
               <button type="button" onClick={() => { setFollow(false); setView((v) => ({ name: "near", nonce: v.nonce + 1 })); }} className="rounded border border-line bg-black/60 px-2 py-0.5 text-[11px] text-muted hover:text-text">Globe</button>
-              <button type="button" onClick={() => setAnalystOpen((o) => !o)} aria-pressed={analystOpen} className="hidden rounded border border-accent/50 bg-black/60 px-2 py-0.5 text-[11px] text-accent hover:bg-accent/10 lg:inline-block">Ask mission analyst</button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.matchMedia("(min-width: 1024px)").matches) setAnalystOpen((o) => !o);
+                  else {
+                    setMobileTab("analyst");
+                    requestAnimationFrame(() => document.getElementById("mission-analyst")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+                  }
+                }}
+                aria-pressed={analystOpen}
+                className="rounded border border-accent/60 bg-accent/15 px-2 py-0.5 text-[11px] font-medium text-accent hover:bg-accent/25"
+              >
+                Ask mission analyst
+              </button>
             </div>
           </div>
 
@@ -633,7 +706,7 @@ export default function RoutePlanner({ active }: { active: boolean }) {
               </div>
             )}
             <div className="flex flex-wrap items-end justify-between gap-2 text-[10.5px] text-faint">
-              <div className="hidden flex-wrap gap-x-2.5 rounded bg-black/50 px-1.5 py-0.5 sm:flex">
+              <div className="hidden">
                 <span><span className="text-accent">━</span> route</span>
                 <span><span className="text-both">╍</span> baseline</span>
                 <span><span style={{ color: CATEGORY_COLOR.crewed_landing }}>●</span> crewed landing</span>
@@ -670,8 +743,7 @@ export default function RoutePlanner({ active }: { active: boolean }) {
             {healthError && <p role="alert" className="text-[12px] text-danger">Backend unreachable: {healthError}</p>}
             {health && !health.spice_available && p.mode === "spice" && (
               <p role="alert" className="text-[12px] text-sun">
-                SPICE kernels unavailable; the planner never falls back on its own.{" "}
-                <button type="button" onClick={() => setP({ ...p, mode: "synthetic" })} className="underline">Use synthetic demo data (not scientific)</button>
+                SPICE kernels unavailable; run ./scripts/fetch_kernels.sh and restart the backend. The planner never falls back to approximate data.
               </p>
             )}
             {synthetic && <p role="alert" className="text-[12px] text-sun">Synthetic demo geometry: not SPICE results and not NASA data.</p>}
@@ -681,6 +753,12 @@ export default function RoutePlanner({ active }: { active: boolean }) {
                 <span>{note} {viewingOther && <button type="button" onClick={applyViewedInputs} className="ml-1 text-accent underline">Use these inputs</button>}</span>
                 <button type="button" onClick={() => setNote(null)} aria-label="Dismiss" className="text-faint hover:text-text">×</button>
               </p>
+            )}
+            {!stale && (res?.network?.adjustments?.length ?? 0) > 0 && (
+              <div role="status" className="rounded border border-sun/40 bg-sun/[0.06] px-2 py-1 text-[11.5px] text-sun">
+                <p className="font-medium">Auto-fit changed your constraints to reach the pole:</p>
+                <ul className="list-disc pl-4 text-[11px]">{res!.network!.adjustments!.map((a) => <li key={a}>{a}</li>)}</ul>
+              </div>
             )}
             {res?.status === "infeasible" && (
               <div role="status" className="text-[12.5px]">
@@ -693,6 +771,8 @@ export default function RoutePlanner({ active }: { active: boolean }) {
                 {res.diagnostics?.suggestion && <p className="mt-0.5 text-[12px] text-text">→ {res.diagnostics.suggestion}</p>}
               </div>
             )}
+            {!res && !loading && !error && <p className="text-[12px] text-muted"><span className="text-accent">4</span> · Results appear here after you plan a route.</p>}
+            {tr && tr.elapsed_s.length > 1 && <VisibilityStrip tr={tr} index={i} onIndex={setIndex} />}
             <div className={`flex flex-wrap items-center gap-x-5 gap-y-1 ${stale || loading ? "opacity-60" : ""}`}>
               {(
                 [
@@ -713,6 +793,7 @@ export default function RoutePlanner({ active }: { active: boolean }) {
                     {res.route.visited.map(name).join(" → ")}
                     {res.network?.generated && <span className="text-faint"> · auto network: {res.network.n_generated} waypoints, {res.network.corridors} corridor{res.network.corridors === 1 ? "" : "s"}</span>}
                     {res.network?.approximations.length ? <span className="text-sun"> · approximate</span> : null}
+                    {res.network?.adjustments?.length ? <span className="text-sun"> · auto-fit</span> : null}
                   </span>
                 )}
               </div>
@@ -760,7 +841,7 @@ export default function RoutePlanner({ active }: { active: boolean }) {
 
       {/* ------------------------------------------------ analyst drawer */}
       {(analystOpen || mobileTab === "analyst") && (
-        <div className={`order-4 h-[70vh] border-line lg:order-none lg:h-auto lg:w-[360px] lg:border-l ${mobileTab === "analyst" ? "block" : "hidden"} ${analystOpen ? "lg:block" : "lg:hidden"}`}>
+        <div id="mission-analyst" className={`order-4 h-[70vh] border-line lg:order-none lg:h-auto lg:w-[360px] lg:border-l ${mobileTab === "analyst" ? "block" : "hidden"} ${analystOpen ? "lg:block" : "lg:hidden"}`}>
           <MissionAnalyst runId={res?.run?.run_id ?? null} runFresh={!stale} onOpenRun={openRun} onRef={onRef} onClose={() => { setAnalystOpen(false); setMobileTab("plan"); }} />
         </div>
       )}

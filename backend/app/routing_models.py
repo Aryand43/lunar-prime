@@ -69,6 +69,9 @@ class RouteRequest(BaseModel):
     local_search: bool = True
     auto_network: bool = Field(False, description="Generate planning-waypoint corridors from start to destination")
     include_catalog_sites: bool = Field(False, description="Add catalogue mission sites near the corridor as candidates")
+    auto_fit: bool = Field(
+        False, description="Raise horizon, speed, leg length, grid and corridor count only as needed to reach the "
+                           "destination within the work limits; every change is reported in network.adjustments")
     planning_mode: Literal["exact", "coarse"] = Field(
         "exact", description="coarse = single corridor and, if needed, a coarser time grid (reported)")
     mode: Literal["spice", "synthetic"] = "spice"
@@ -276,6 +279,8 @@ class NetworkOut(BaseModel):
     planning_mode: Literal["exact", "coarse"]
     notes: list[str]
     approximations: list[str]
+    adjustments: list[str] = Field(default_factory=list, description="Auto-fit changes to the requested inputs")
+    effective: dict = Field(default_factory=dict, description="Parameters actually used by the planner")
 
 
 class DiagnosticsOut(BaseModel):

@@ -33,6 +33,8 @@ export interface GlobeSite {
   interactive?: boolean;
   /** Extra tooltip line. */
   detail?: string;
+  /** Override the marker colour (e.g. per-scenario colours). */
+  color?: string;
 }
 
 export interface GlobePath {
@@ -238,7 +240,7 @@ function MarkerLayer({ sites, px, tex, onHover, onClick }: {
     const c = new THREE.Color();
     for (const s of sites) {
       pos.push(...latLonToVec3(s.lat, s.lon, MARKER_R));
-      c.set(COLOR[s.kind ?? "site"]);
+      c.set(s.color ?? COLOR[s.kind ?? "site"]);
       col.push(c.r, c.g, c.b);
     }
     g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
@@ -425,7 +427,7 @@ export default function MoonGlobe({
     ...(subEarth && !compact ? [{ key: "earth", pos: latLonToVec3(subEarth.lat, subEarth.lon, GLYPH_R) }] : []),
     ...(rover && !live ? [{ key: "rover", pos: latLonToVec3(rover.lat, rover.lon, 1.004) }] : []),
   ];
-  const showRoverLabel = !!rover || !!live;
+  const showRoverLabel = false;
 
   return (
     <div className={`relative h-full w-full overflow-hidden ${picking ? "cursor-crosshair" : hoverKey && sites.find((s) => s.key === hoverKey)?.interactive ? "cursor-pointer" : "cursor-grab active:cursor-grabbing"}`}>
@@ -484,7 +486,7 @@ export default function MoonGlobe({
               <div className={`ml-2 -translate-y-1/2 whitespace-nowrap rounded border bg-black/75 px-1.5 py-0.5 text-[10.5px] leading-tight ${
                 s.kind === "destination" ? "border-danger/50" : s.kind === "visited" ? "border-accent/50" : s.kind === "crewed" || s.kind === "robotic" ? "border-white/20" : "border-white/15"
               }`}>
-                {s.letter && <span className="mr-1 font-semibold" style={{ color: COLOR[s.kind ?? "site"] }}>{s.letter}</span>}
+                {s.letter && <span className="mr-1 font-semibold" style={{ color: s.color ?? COLOR[s.kind ?? "site"] }}>{s.letter}</span>}
                 <span className="text-text">{s.label}</span>
                 {s.detail && s.key === hoverKey && <span className="block text-[10px] text-muted">{s.detail}</span>}
               </div>

@@ -47,6 +47,9 @@ app.add_middleware(
 )
 
 
+_SYNTHETIC_DISABLED = "Synthetic data is disabled. All results are computed with NASA/JPL NAIF SPICE kernels."
+
+
 def _error(status: int, code: str, message: str, details: list | None = None) -> JSONResponse:
     return JSONResponse(status_code=status, content={"error": {"code": code, "message": message, "details": details or []}})
 
@@ -68,7 +71,7 @@ def health() -> HealthResponse:
     return HealthResponse(
         status="ok" if st.loaded else "degraded",
         spice_available=st.loaded,
-        synthetic_available=True,
+        synthetic_available=config.ALLOW_SYNTHETIC,
         error=st.error,
         toolkit_version=st.toolkit_version,
         coverage_start_utc=st.coverage_start_utc,
@@ -95,9 +98,11 @@ def compare(req: CompareRequest):
             return _error(
                 503, "spice_unavailable",
                 (kernels.STATUS.error or "SPICE kernels are not loaded.")
-                + " Synthetic demo mode is available for UI development, but its results are not scientific.",
+                + " Run scripts/fetch_kernels.sh and restart the backend.",
             )
         provider = SpiceProvider()
+    elif not config.ALLOW_SYNTHETIC:
+        return _error(422, "synthetic_disabled", _SYNTHETIC_DISABLED)
     else:
         provider = SyntheticProvider()
     try:
@@ -137,8 +142,10 @@ def compute_route(req: RouteRequest, parent_run_id: str | None = None) -> tuple[
             return 503, _err_body(
                 "spice_unavailable",
                 (kernels.STATUS.error or "SPICE kernels are not loaded.")
-                + " Synthetic demo mode is available for UI development, but its results are not scientific.")
+                + " Run scripts/fetch_kernels.sh and restart the backend.")
         provider = SpiceProvider()
+    elif not config.ALLOW_SYNTHETIC:
+        return 422, _err_body("synthetic_disabled", _SYNTHETIC_DISABLED)
     else:
         provider = SyntheticProvider()
     try:

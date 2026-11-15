@@ -371,3 +371,17 @@ def test_session_deletion_removes_indexed_content(client, session):
     assert not any("quokka" in x["text"] for x in r.search("unique-token-quokka", sid))
     assert not any("quokka" in c["text"] for c in store.all_chunks())
     assert store.messages(sid) == [] and not store.check_session(sid, h["x-session-token"])
+
+
+def test_refs_with_brackets_resolve(client, session, run_id, fake):
+    sid, h = session
+    fake([lambda m: ("", [("get_visibility_intervals", {"run_id": run_id, "body": "sun"})], "tool_use"),
+          lambda m: (f"First interval [ref:{(last_tool_result(m)['hidden'] or last_tool_result(m)['visible'])[0]['ref']}] and leg "
+                     f"[ref:run:{run_id}#segments[0]] vs [ref:run:{run_id}#comparison[Darkness exposure]].", [],
+                     "end_turn")])
+    msg = sse(client.post(f"/api/chat/sessions/{sid}/messages", json={"content": "gaps?", "run_id": run_id},
+                          headers=h))[-1][1]["message"]
+    assert "]" not in msg["content"].replace("[1]", "").replace("[2]", "").replace("[3]", "")
+    paths = [r["path"] for r in msg["refs"]]
+    assert paths[0].startswith("intervals.sun.") and paths[0].endswith("[0]")
+    assert paths[1:] == ["segments[0]", "comparison[Darkness exposure]"]

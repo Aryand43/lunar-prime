@@ -117,7 +117,7 @@ export default function StartPicker({
   return (
     <section aria-labelledby={`${uid}-h`} className="space-y-2.5">
       <div className="flex items-baseline justify-between">
-        <h2 id={`${uid}-h`} className="text-[13px] font-medium">Start anywhere on the Moon</h2>
+        <h2 id={`${uid}-h`} className="text-[13px] font-medium"><span className="text-accent">1</span> · Start: landing site or any point</h2>
         <span className="text-[10px] text-faint" title="Planetocentric latitude, east-positive longitude (MOON_ME). Latitude first.">lat, lon · °</span>
       </div>
 

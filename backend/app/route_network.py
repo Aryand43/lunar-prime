@@ -106,38 +106,60 @@ def generate_network(start_lat, start_lon, dest_lat, dest_lon, max_leg_km: float
 COARSE_GRID_OPTIONS = (10, 15, 30, 60, 120, 180, 240, 360)
 
 
-def prepare_request(req):
-    """Expand auto_network / catalogue options into explicit waypoints. Returns (request, network_report).
+def _fit_physical(req, report: dict):
+    """Auto-fit (explicitly requested): raise horizon, then speed, then leg length just enough to reach the
+    destination. Every change is recorded in report["adjustments"]; nothing is changed silently."""
+    a, b = unit_vector(req.start.lat_deg, req.start.lon_deg), unit_vector(req.destination.lat_deg, req.destination.lon_deg)
+    om = central_angle(a, b)
+    dist = om * R_KM
+    upd: dict = {}
+    speed, horizon = req.speed_kmh, req.horizon_hours
+    slack = min(req.max_wait_hours, 24.0)
+    need_h = dist / speed * 1.3 + slack  # room for corridor detours, grid alignment and waits
+    max_h = config.ROUTE_MAX_HORIZON_HOURS
+    if need_h > horizon:
+        if need_h <= max_h:
+            upd["horizon_hours"] = float(math.ceil(need_h))
+        else:
+            upd["horizon_hours"] = max_h
+            new_speed = math.ceil(dist * 1.3 / (max_h - slack) * 10) / 10
+            upd["speed_kmh"] = max(speed, new_speed)
+            report["adjustments"].append(
+                f"Speed raised from {speed:g} to {upd['speed_kmh']:g} km/h: at {speed:g} km/h the {dist:.0f} km "
+                f"traverse needs at least {dist / speed:.0f} h, beyond the {max_h:g} h maximum horizon.")
+        report["adjustments"].append(
+            f"Horizon raised from {horizon:g} h to {upd['horizon_hours']:g} h "
+            f"(1.3 x the {dist / upd.get('speed_kmh', speed):.0f} h minimum travel time plus waiting room).")
+    if req.auto_network and dist > req.max_leg_km:
+        spine_max = max(1, (config.ROUTE_MAX_BASES - 2 - len(req.waypoints)) // 3)
+        need_leg = dist / (ALONG_FRAC * (spine_max + 1)) * (1.08 if om > math.pi - 0.05 else 1.03)
+        if need_leg > req.max_leg_km:
+            upd["max_leg_km"] = float(min(math.ceil(need_leg), math.floor(config.ROUTE_MAX_LEG_KM)))
+            report["adjustments"].append(
+                f"Maximum leg raised from {req.max_leg_km:g} km to {upd['max_leg_km']:g} km so the generated "
+                f"network for this {dist:.0f} km traverse fits the {config.ROUTE_MAX_BASES}-waypoint exact-search limit.")
+    return req.model_copy(update=upd) if upd else req
 
-    Never changes speed, horizon, leg limit, weights or mode. In coarse planning mode (explicitly
-    requested), it may use a single corridor and a coarser time grid; every such change is reported.
-    """
-    from .routing import Context, estimate_and_check, is_start_at_destination, params_from
+
+def _expand(req, corridors: int):
+    """Generate planning waypoints / catalogue candidates; returns the expanded request (may raise RoutingError)."""
     from .routing_models import RouteBaseInput
 
-    report = dict(generated=False, generator=None, n_generated=0, n_user_waypoints=len(req.waypoints),
-                  n_catalog_sites=0, corridors=0, along_spacing_km=None, lateral_offset_km=None,
-                  notes=[], approximations=[], planning_mode=req.planning_mode, catalog_site_ids=[])
-    if is_start_at_destination(req):
-        report["notes"].append("Start is already at the destination.")
-        return req, report
+    rep = dict(generated=False, generator=None, n_generated=0, n_catalog_sites=0, corridors=0,
+               along_spacing_km=None, lateral_offset_km=None, notes=[], catalog_site_ids=[])
     wps = list(req.waypoints)
     if req.auto_network:
-        corridors = 1 if req.planning_mode == "coarse" else 3
         gen, info = generate_network(req.start.lat_deg, req.start.lon_deg, req.destination.lat_deg,
                                      req.destination.lon_deg, req.max_leg_km, n_corridors=corridors,
                                      max_nodes=config.ROUTE_MAX_BASES - 2 - len(wps))
-        report.update(generated=True, n_generated=len(gen), corridors=corridors if gen else 0,
-                      along_spacing_km=round(info["along_spacing_km"], 3),
-                      lateral_offset_km=round(info["lateral_offset_km"], 3) if corridors > 1 else None,
-                      generator=(f"Deterministic great-circle corridor generator: central corridor"
-                                 f"{f' plus {corridors - 1} lateral corridors' if corridors > 1 else ''}, "
-                                 f"along-track spacing <= {ALONG_FRAC:g} x max leg, lateral offset "
-                                 f"{LATERAL_FRAC:g} x max leg."))
-        report["notes"].extend(info["notes"])
-        if req.planning_mode == "coarse":
-            report["approximations"].append(
-                "Coarse planning: a single central corridor is generated (no lateral alternatives).")
+        rep.update(generated=True, n_generated=len(gen), corridors=corridors if gen else 0,
+                   along_spacing_km=round(info["along_spacing_km"], 3),
+                   lateral_offset_km=round(info["lateral_offset_km"], 3) if corridors > 1 else None,
+                   generator=(f"Deterministic great-circle corridor generator: central corridor"
+                              f"{f' plus {corridors - 1} lateral corridors' if corridors > 1 else ''}, "
+                              f"along-track spacing <= {ALONG_FRAC:g} x max leg, lateral offset "
+                              f"{LATERAL_FRAC:g} x max leg."))
+        rep["notes"].extend(info["notes"])
         wps += [RouteBaseInput(**w) for w in gen]
     if req.include_catalog_sites:
         from .site_catalog import sites_near_corridor
@@ -151,32 +173,73 @@ def prepare_request(req):
                 continue
             wps.append(RouteBaseInput(id=sid, label=f"Catalogue site: {site.name}"[:64], lat_deg=site.lat_deg,
                                       lon_deg=site.lon_deg))
-            report["catalog_site_ids"].append(site.id)
-        report["n_catalog_sites"] = len(report["catalog_site_ids"])
+            rep["catalog_site_ids"].append(site.id)
+        rep["n_catalog_sites"] = len(rep["catalog_site_ids"])
         if near:
-            report["notes"].append("Catalogue sites are included only as candidate positions; they imply no "
-                                   "infrastructure, power, supplies or communications.")
-    req = req.model_copy(update={"waypoints": wps})
+            rep["notes"].append("Catalogue sites are included only as candidate positions; they imply no "
+                                "infrastructure, power, supplies or communications.")
+    return req.model_copy(update={"waypoints": wps}), rep
 
-    if req.planning_mode == "coarse":
-        # Coarsen the time grid only as far as needed to fit the work limits, and say so.
-        from .routing import RoutingError as _RE, build_bases
-        for g in [x for x in COARSE_GRID_OPTIONS if x >= req.grid_minutes]:
-            trial = req.model_copy(update={"grid_minutes": float(g)})
-            if trial.grid_minutes > trial.horizon_hours * 60:
+
+def prepare_request(req):
+    """Expand auto_network / catalogue options into explicit waypoints. Returns (request, network_report).
+
+    Without auto_fit or coarse planning, speed, horizon, leg limit, grid, weights and mode are never changed.
+    Coarse planning (explicit) may use a single corridor and a coarser time grid. Auto-fit (explicit) may
+    additionally raise horizon, speed and leg length so the destination is reachable within the work limits.
+    Every change is reported in network.adjustments / network.approximations.
+    """
+    from .routing import Context, RoutingError as _RE, build_bases, estimate_and_check, is_start_at_destination, params_from
+
+    report = dict(generated=False, generator=None, n_generated=0, n_user_waypoints=len(req.waypoints),
+                  n_catalog_sites=0, corridors=0, along_spacing_km=None, lateral_offset_km=None,
+                  notes=[], approximations=[], planning_mode=req.planning_mode, catalog_site_ids=[],
+                  adjustments=[], effective={})
+    if is_start_at_destination(req):
+        report["notes"].append("Start is already at the destination.")
+        return req, report
+    original = req
+    if req.auto_fit:
+        req = _fit_physical(req, report)
+
+    flexible = req.auto_fit or req.planning_mode == "coarse"
+    corridor_opts = [1] if req.planning_mode == "coarse" else ([3, 1] if req.auto_fit and req.auto_network else [3])
+    grid_opts = sorted({float(req.grid_minutes), *[float(g) for g in COARSE_GRID_OPTIONS if g >= req.grid_minutes]}) \
+        if flexible else [float(req.grid_minutes)]
+    last: Exception | None = None
+    for corridors in corridor_opts:
+        try:
+            expanded, rep = _expand(req, corridors)
+        except _RE as exc:
+            last = exc
+            continue
+        for g in grid_opts:
+            if g > expanded.horizon_hours * 60:
                 break
+            trial = expanded.model_copy(update={"grid_minutes": g})
             try:
-                ctx = Context(build_bases(trial.start, trial.waypoints, trial.destination), params_from(trial), None)
-                estimate_and_check(ctx)
-            except _RE:
+                estimate_and_check(Context(build_bases(trial.start, trial.waypoints, trial.destination),
+                                           params_from(trial), None))
+            except _RE as exc:
+                last = exc
+                if not flexible:
+                    raise
                 continue
-            if g != req.grid_minutes:
-                report["approximations"].append(
-                    f"Coarse planning: time grid coarsened from {req.grid_minutes:g} min to {g:g} min to fit the "
+            report.update({k: v for k, v in rep.items() if k != "notes"})
+            report["notes"].extend(rep["notes"])
+            label = "Auto-fit" if req.auto_fit else "Coarse planning"
+            if corridors == 1 and req.auto_network:
+                msg = f"{label}: a single central corridor is generated (no lateral alternatives)."
+                (report["adjustments"] if req.auto_fit and req.planning_mode != "coarse" else report["approximations"]).append(msg)
+            if g != original.grid_minutes:
+                report["adjustments" if req.auto_fit else "approximations"].append(
+                    f"{label}: time grid coarsened from {original.grid_minutes:g} min to {g:g} min to fit the "
                     "exact-search work limits.")
-            req = trial
-            break
-    return req, report
+            report["effective"] = dict(speed_kmh=trial.speed_kmh, horizon_hours=trial.horizon_hours,
+                                       max_leg_km=trial.max_leg_km, grid_minutes=trial.grid_minutes,
+                                       corridors=corridors if req.auto_network else 0)
+            return trial, report
+    raise last if last is not None else _RE("no planning configuration fits the work limits")
 
 
 def preflight(req) -> dict:
@@ -189,24 +252,15 @@ def preflight(req) -> dict:
     dist = central_angle(a, b) * R_KM
     out = dict(great_circle_km=round(dist, 3), min_travel_hours=round(dist / req.speed_kmh, 3),
                horizon_hours=req.horizon_hours, within_limits=True, start_at_destination=False,
-               binding_constraints=[], suggestions=[], network=None, work=None, coarse_available=False)
+               binding_constraints=[], suggestions=[], adjustments=[], network=None, work=None,
+               coarse_available=False)
     if is_start_at_destination(req):
         out["start_at_destination"] = True
         return out
-    lb = dist / req.speed_kmh
-    if lb > req.horizon_hours + 1e-9:
-        out["binding_constraints"].append(
-            f"Horizon: at {req.speed_kmh:g} km/h the {dist:.1f} km great-circle distance needs at least "
-            f"{lb:.1f} h, beyond the {req.horizon_hours:g} h horizon.")
-        need_speed = dist / req.horizon_hours
-        out["suggestions"].append(
-            f"Increase speed to at least {need_speed:.2f} km/h"
-            + (f" or the horizon to at least {math.ceil(lb * 1.1)} h"
-               if math.ceil(lb * 1.1) <= config.ROUTE_MAX_HORIZON_HOURS else
-               f" (the horizon cannot exceed {config.ROUTE_MAX_HORIZON_HOURS:g} h)") + ".")
     try:
         prepared, report = prepare_request(req)
         out["network"] = report
+        out["adjustments"] = report.get("adjustments", [])
         ctx = Context(build_bases(prepared.start, prepared.waypoints, prepared.destination),
                       params_from(prepared), None)
         legs, work = estimate_and_check(ctx)
@@ -214,10 +268,26 @@ def preflight(req) -> dict:
                            grid_minutes=prepared.grid_minutes,
                            time_states=len(ctx.bases) * (work["n_steps"] + 1))
     except _RE as exc:
+        prepared = req
         out["within_limits"] = False
         out["binding_constraints"].append(f"Work limit: {exc}")
         out["coarse_available"] = req.planning_mode != "coarse"
+        if not req.auto_fit:
+            out["suggestions"].append("Turn on auto-fit to adjust horizon, speed, leg length and grid as needed "
+                                      "(every change is reported).")
         if out["coarse_available"]:
             out["suggestions"].append("Try coarse planning (single corridor, coarser time grid if needed); "
                                       "the result will be labelled approximate.")
+    lb = dist / prepared.speed_kmh
+    out.update(min_travel_hours=round(lb, 3), horizon_hours=prepared.horizon_hours)
+    if lb > prepared.horizon_hours + 1e-9:
+        out["binding_constraints"].insert(0, (
+            f"Horizon: at {prepared.speed_kmh:g} km/h the {dist:.1f} km great-circle distance needs at least "
+            f"{lb:.1f} h, beyond the {prepared.horizon_hours:g} h horizon."))
+        fix_h = math.ceil(lb * 1.1)
+        out["suggestions"].insert(0, (
+            f"Increase speed to at least {dist / prepared.horizon_hours:.2f} km/h"
+            + (f" or the horizon to at least {fix_h} h" if fix_h <= config.ROUTE_MAX_HORIZON_HOURS
+               else f" (the horizon cannot exceed {config.ROUTE_MAX_HORIZON_HOURS:g} h)")
+            + ", or turn on auto-fit."))
     return out

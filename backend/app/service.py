@@ -116,10 +116,14 @@ def run_compare(req: CompareRequest, provider: EphemerisProvider) -> CompareResp
             ),
         ))
 
-    a, b = site_results
-    headline, statements, tol = narrative.build(
-        a.id, a.label, a.metrics, b.id, b.label, b.metrics, duration_s, step_s
-    )
+    if len(site_results) == 2:
+        a, b = site_results
+        headline, statements, tol = narrative.build(
+            a.id, a.label, a.metrics, b.id, b.label, b.metrics, duration_s, step_s
+        )
+    else:  # the pairwise narrative applies to exactly two sites; metrics are reported for every site
+        headline, statements, tol = (
+            "Metrics are reported for each site; compare them per criterion.", [], float(2 * step_s))
 
     if provider.mode == "spice":
         provenance = (

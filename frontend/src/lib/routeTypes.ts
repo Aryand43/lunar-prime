@@ -31,6 +31,7 @@ export interface RouteRequest {
   auto_network: boolean;
   include_catalog_sites: boolean;
   planning_mode: "exact" | "coarse";
+  auto_fit: boolean;
   mode: Mode;
 }
 
@@ -52,6 +53,8 @@ export interface NetworkOut {
   planning_mode: "exact" | "coarse";
   notes: string[];
   approximations: string[];
+  adjustments?: string[];
+  effective?: { speed_kmh?: number; horizon_hours?: number; max_leg_km?: number; grid_minutes?: number; corridors?: number };
 }
 
 export interface DiagnosticsOut {
@@ -77,6 +80,7 @@ export interface PreflightResponse {
   start_at_destination: boolean;
   binding_constraints: string[];
   suggestions: string[];
+  adjustments?: string[];
   network: NetworkOut | null;
   work: { n_steps: number; n_bases: number; n_candidate_legs: number; time_states: number; estimated_sample_evals: number; grid_minutes: number } | null;
   coarse_available: boolean;

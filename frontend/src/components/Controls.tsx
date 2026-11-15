@@ -250,31 +250,9 @@ export function WindowCard({
         {err.samples ?? (n ? `${n.toLocaleString()} samples / site · limit ${maxSamples.toLocaleString()}` : "—")}
       </p>
 
-      <details className="mt-3 border-t border-line pt-2">
-        <summary className="cursor-pointer text-[11px] uppercase tracking-wider text-muted hover:text-text">Data source</summary>
-        <div className="mt-2 space-y-1.5 text-[12px]" role="radiogroup" aria-label="Data source">
-          {(
-            [
-              ["spice", "NASA NAIF SPICE (DE440)", "Scientific computation from official kernels."],
-              ["synthetic", "Synthetic demo data", "Analytic approximation for UI development. Not scientific, not NASA data."],
-            ] as [Mode, string, string][]
-          ).map(([m, title, desc]) => (
-            <label key={m} className="flex cursor-pointer gap-2">
-              <input
-                type="radio"
-                name={`${uid}-mode`}
-                className="mt-0.5 accent-[var(--color-accent)]"
-                checked={draft.mode === m}
-                onChange={() => onChange({ ...draft, mode: m })}
-              />
-              <span>
-                <span className={m === "synthetic" ? "text-sun" : "text-text"}>{title}</span>
-                <span className="block text-[11px] text-faint">{desc}</span>
-              </span>
-            </label>
-          ))}
-        </div>
-      </details>
+      <p className="mt-3 border-t border-line pt-2 text-[11px] text-faint">
+        Data source: <span className="text-text">NASA/JPL NAIF SPICE (DE440 ephemeris, MOON_ME frame)</span>
+      </p>
     </fieldset>
   );
 }

@@ -36,7 +36,7 @@ class SiteInput(BaseModel):
 class CompareRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    sites: list[SiteInput] = Field(..., min_length=2, max_length=2)
+    sites: list[SiteInput] = Field(..., min_length=1, max_length=4)
     start_utc: datetime = Field(..., description="ISO 8601 UTC start, e.g. 2026-12-01T00:00:00Z")
     duration_hours: float = Field(..., ge=config.MIN_DURATION_HOURS, le=config.MAX_DURATION_HOURS)
     step_minutes: float = Field(..., ge=config.MIN_STEP_MINUTES, le=config.MAX_STEP_MINUTES)
@@ -53,8 +53,9 @@ class CompareRequest(BaseModel):
 
     @model_validator(mode="after")
     def _check(self) -> "CompareRequest":
-        if self.sites[0].id == self.sites[1].id:
-            raise ValueError("the two sites must have different ids")
+        ids = [s.id for s in self.sites]
+        if len(set(ids)) != len(ids):
+            raise ValueError("site ids must be unique")
         n = int(self.duration_hours * 60.0 // self.step_minutes) + 2
         if n > config.MAX_SAMPLES:
             raise ValueError(

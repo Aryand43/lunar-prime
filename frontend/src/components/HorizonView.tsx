@@ -12,7 +12,7 @@ const STRIP_LIM = 10; // degrees shown above/below the ideal horizon in the stri
 
 interface Props {
   site: SiteResult;
-  letter: "A" | "B";
+  letter: string;
   index: number;
 }
 

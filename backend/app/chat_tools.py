@@ -15,7 +15,8 @@ from typing import Any, Callable, Optional
 from .persistence import Store
 from .site_catalog import get as get_site
 
-REF_RE = re.compile(r"\[ref:([^\]\s]{3,200})\]")
+# Refs may contain one level of brackets, e.g. run:x#segments[3] or run:x#comparison[Darkness exposure].
+REF_RE = re.compile(r"\[ref:((?:[^\[\]\s]|\[[^\[\]]{1,60}\]){3,200})\]")
 
 ALLOWED_CHANGES = {"departure_utc", "speed_kmh", "horizon_hours", "max_leg_km", "max_wait_hours", "grid_minutes",
                    "weights", "planning_mode", "auto_network", "include_catalog_sites", "local_search"}
@@ -53,6 +54,8 @@ def run_summary(run: dict) -> dict:
                                         "max_leg_km", "grid_minutes", "max_wait_hours", "weights", "planning_mode",
                                         "auto_network", "include_catalog_sites")},
         diagnostics=resp.get("diagnostics"), network=resp.get("network"),
+        effective_inputs=(resp.get("network") or {}).get("effective") or None,
+        auto_fit_adjustments=(resp.get("network") or {}).get("adjustments") or [],
         optimality_scope=resp.get("search", {}).get("optimality_scope"),
         resolution=dict(grid_minutes=resp.get("search", {}).get("grid_minutes"),
                         sampling_minutes=resp.get("search", {}).get("sampling_minutes")),
@@ -323,6 +326,15 @@ TOOL_SPECS = [
 ]
 
 
+METRIC_LABELS = {
+    "distance_km": "Distance (km)", "elapsed_s": "Travel time (s)", "movement_s": "Moving time (s)",
+    "waiting_s": "Waiting time (s)", "darkness_s": "Darkness (s)", "earth_invisible_s": "Earth-invisible time (s)",
+    "both_visible_s": "Sun and Earth visible (s)", "longest_darkness_s": "Longest darkness (s)",
+    "longest_earth_invisible_s": "Longest Earth-invisible (s)", "cost.total": "Objective cost",
+    "departure_utc": "Departure (UTC)", "arrival_utc": "Arrival (UTC)",
+}
+
+
 def resolve_ref(store: Store, ref: str, allowed_runs: set[str], session_id: Optional[str]) -> Optional[dict]:
     """Resolve a citation to a real run field, segment, interval, catalogue site or ingested document."""
     try:
@@ -343,7 +355,8 @@ def resolve_ref(store: Store, ref: str, allowed_runs: set[str], session_id: Opti
                 label = f"{'Darkness' if m.group(1) == 'sun' else 'Earth-invisible'} interval {int(m.group(3)) + 1}"
             elif path.startswith("metrics."):
                 value = resolve_path((resp.get("route") or {}).get("metrics") or {}, path[len("metrics."):])
-                label = path[len("metrics."):].replace("_", " ").replace(".", " · ")
+                key = path[len("metrics."):]
+                label = METRIC_LABELS.get(key, key.replace("_", " ").replace(".", " · "))
             elif path.startswith("segments"):
                 value = resolve_path(resp.get("route") or {}, path)
                 label = f"Segment {int(re.findall(r'\d+', path)[0]) + 1}"

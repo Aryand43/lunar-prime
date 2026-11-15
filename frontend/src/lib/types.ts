@@ -10,7 +10,8 @@ export interface SiteInput {
 }
 
 export interface CompareRequest {
-  sites: [SiteInput, SiteInput];
+  /** 1 to 4 sites. */
+  sites: SiteInput[];
   start_utc: string;
   duration_hours: number;
   step_minutes: number;
@@ -107,7 +108,7 @@ export interface Metadata {
 export interface CompareResponse {
   timestamps_utc: string[];
   elapsed_s: number[];
-  sites: [SiteResult, SiteResult];
+  sites: SiteResult[];
   subpoints: {
     subsolar_lat_deg: number[];
     subsolar_lon_deg: number[];

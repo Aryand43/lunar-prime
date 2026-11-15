@@ -229,7 +229,6 @@ export function ScheduleCard({ p, onChange }: { p: PlannerParams; onChange: (p: 
 }
 
 export function ObjectiveCard({ p, onChange }: { p: PlannerParams; onChange: (p: PlannerParams) => void }) {
-  const uid = useId();
   const e = paramErrors(p);
   const set = (k: keyof PlannerParams) => (v: string) => onChange({ ...p, [k]: v });
   return (
@@ -256,22 +255,7 @@ export function ObjectiveCard({ p, onChange }: { p: PlannerParams; onChange: (p:
           <input type="checkbox" checked={p.localSearch} onChange={(ev) => onChange({ ...p, localSearch: ev.target.checked })} className="accent-[var(--color-accent)]" />
           Continuous-time local refinement
         </label>
-        <div className="mt-2 space-y-1.5 text-[12px]" role="radiogroup" aria-label="Data source">
-          {(
-            [
-              ["spice", "NASA NAIF SPICE (DE440)", "Scientific Sun/Earth geometry."],
-              ["synthetic", "Synthetic demo data", "Analytic approximation for UI development. Not scientific."],
-            ] as const
-          ).map(([m, title, desc]) => (
-            <label key={m} className="flex cursor-pointer gap-2">
-              <input type="radio" name={`${uid}-mode`} className="mt-0.5 accent-[var(--color-accent)]" checked={p.mode === m} onChange={() => onChange({ ...p, mode: m })} />
-              <span>
-                <span className={m === "synthetic" ? "text-sun" : "text-text"}>{title}</span>
-                <span className="block text-[11px] text-faint">{desc}</span>
-              </span>
-            </label>
-          ))}
-        </div>
+        <p className="mt-2 text-[11px] text-faint">Data source: <span className="text-text">NASA/JPL NAIF SPICE (DE440)</span></p>
       </details>
     </fieldset>
   );

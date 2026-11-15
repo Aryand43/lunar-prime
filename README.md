@@ -7,7 +7,8 @@ Compare two lunar landing sites by **geometric sunlight** and **direct-to-Earth 
 - Scrub through time. The globe is lit from the computed subsolar point, and a local-horizon sky plot shows the Sun and Earth for each site.
 - Compare synchronized elevation timelines and refined visibility intervals, summary metrics, and plain-language findings.
 - Read the method, limitations, kernel provenance (with SHA-256), and export the full result as JSON.
-- **Route simulator (default tab):** start anywhere on the Moon (typed N/S/E/W, pasted decimal degrees, globe pick, or a verified mission site) and get candidate routes to the geographic South Pole. A deterministic planning-waypoint network is generated automatically. See [Route simulator](#route-simulator-start-anywhere).
+- **Site Navigator (default tab):** compare up to four scenarios (landing site + start date) side by side. Scorecards for **power** (sunlight share, longest night, peak Sun elevation) and **direct-to-Earth communication** (Earth-in-view share, longest blackout, peak Earth elevation), plus both together and a near-horizon terrain-sensitivity flag. A lit 3D globe, a local sky view per scenario and window strips stay synchronised with one time control. "Best" is marked only when the lead exceeds the sampling tolerance and is not a window-edge lower bound. Sites come from the verified catalogue, pasted coordinates or a globe click; "same site, half a lunar day later" compares dates. `POST /api/compare` now accepts 1–4 sites (the pairwise narrative is produced for exactly two).
+- **Route simulator:** start anywhere on the Moon (typed N/S/E/W, pasted decimal degrees, globe pick, or a verified mission site) and get candidate routes to the geographic South Pole. A deterministic planning-waypoint network is generated automatically. See [Route simulator](#route-simulator-start-anywhere).
 - **Verified mission-site layer:** historical crewed and robotic landing sites and NASA's candidate Artemis III regions, each with a cited NASA/NSSDCA source. See [Site catalogue](#site-catalogue).
 - **Mission analyst:** a persistent, grounded chat drawer that answers follow-up questions from stored run data and project documentation. See [Mission analyst](#mission-analyst).
 
@@ -31,7 +32,7 @@ cd frontend && npm install && npm run dev
 
 Open http://localhost:3000. Next.js proxies `/api/*` to the backend. Set `BACKEND_URL` if the backend is not at `http://127.0.0.1:8000`.
 
-To enable the mission analyst, start the backend with an Anthropic API key (see [.env.example](.env.example) for every option):
+To enable the mission analyst, put your Anthropic API key in `.env` at the repo root (`ANTHROPIC_API_KEY=...`; git-ignored, loaded by the backend at startup), or pass it inline (see [.env.example](.env.example) for every option):
 
 ```bash
 cd backend && ANTHROPIC_API_KEY=sk-ant-... uv run uvicorn app.main:app --port 8000

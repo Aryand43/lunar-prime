@@ -56,6 +56,8 @@ export interface PlannerParams {
   /** Add verified catalogue sites near the corridor as candidate positions. */
   includeCatalog: boolean;
   planningMode: "exact" | "coarse";
+  /** Adjust horizon, speed, leg length and grid only as needed to reach the destination (reported). */
+  autoFit: boolean;
 }
 
 // 2027-02-13: subsolar latitude ~0 deg, so near-pole sunlight depends strongly on longitude.
@@ -76,6 +78,7 @@ export const DEMO_PARAMS: PlannerParams = {
   autoNetwork: true,
   includeCatalog: false,
   planningMode: "exact",
+  autoFit: true,
 };
 
 export const GRID_OPTIONS = [10, 15, 30, 60, 120];

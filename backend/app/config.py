@@ -10,7 +10,33 @@ import os
 from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
+
+
+def _load_dotenv() -> None:
+    """Load KEY=VALUE lines from <repo>/.env and backend/.env without overriding the real environment.
+
+    Minimal parser (no dependency): ignores comments, blank lines and empty values. Disabled with
+    LUNAR_PRIME_NO_DOTENV=1 (the test suite does this so it never sees real credentials).
+    """
+    if os.environ.get("LUNAR_PRIME_NO_DOTENV") == "1":
+        return
+    for path in (BACKEND_DIR.parent / ".env", BACKEND_DIR / ".env"):
+        if not path.is_file():
+            continue
+        for line in path.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key, value = key.strip().removeprefix("export ").strip(), value.strip().strip("'\"")
+            if key and value and key not in os.environ:
+                os.environ[key] = value
+
+
+_load_dotenv()
 KERNEL_DIR = Path(os.environ.get("LUNAR_PRIME_KERNEL_DIR", BACKEND_DIR / "kernels"))
+# The analytic synthetic provider exists only for the offline test suite. The live API serves SPICE only.
+ALLOW_SYNTHETIC = os.environ.get("LUNAR_PRIME_ALLOW_SYNTHETIC") == "1"
 
 # Kernels loaded at startup, in load order. (file name, kernel type, purpose)
 KERNELS: list[tuple[str, str, str]] = [

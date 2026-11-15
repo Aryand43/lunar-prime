@@ -183,9 +183,25 @@ def build_response(req: RouteRequest, provider: EphemerisProvider) -> RouteRespo
     if provider.mode == "spice":
         st = kernels.STATUS
         coverage = (st.coverage_start_et, st.coverage_end_et, st.coverage_start_utc, st.coverage_end_utc)
-    from .route_network import prepare_request
+    from .route_network import COARSE_GRID_OPTIONS, prepare_request
+    from .routing import RoutingError
+    auto_fit = req.auto_fit
     req, net = prepare_request(req)  # pure geometry; may raise RoutingError (422) before any ephemeris work
-    res = run_route(req, provider, coverage)
+    while True:
+        try:
+            res = run_route(req, provider, coverage)
+            break
+        except RoutingError as exc:
+            # The search's label count cannot be predicted exactly beforehand. With auto-fit only, retry on the
+            # next coarser time grid and report it; otherwise the limit error is returned as before.
+            nxt = [g for g in COARSE_GRID_OPTIONS if g > req.grid_minutes and g <= req.horizon_hours * 60]
+            if not (auto_fit and "labels" in str(exc) and nxt):
+                raise
+            net["adjustments"].append(
+                f"Auto-fit: time grid coarsened from {req.grid_minutes:g} min to {nxt[0]:g} min because the exact "
+                f"search exceeded its {config.ROUTE_MAX_LABELS:,}-label limit.")
+            req = req.model_copy(update={"grid_minutes": float(nxt[0])})
+            net.setdefault("effective", {})["grid_minutes"] = req.grid_minutes
     ctx = res["ctx"]
     final, baseline_ev = res["final"], res["baseline"]
 
