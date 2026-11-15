@@ -112,3 +112,65 @@ export interface StoredRun {
 export function fetchRun(runId: string, full = false, signal?: AbortSignal): Promise<StoredRun> {
   return call<StoredRun>(`/api/runs/${encodeURIComponent(runId)}${full ? "?full=1" : ""}`, { signal });
 }
+
+export interface WindowCandidate {
+  rank: number;
+  start_utc: string;
+  end_utc: string;
+  sun_fraction: number;
+  earth_fraction: number;
+  both_fraction: number;
+  longest_night_s: number;
+  longest_blackout_s: number;
+}
+
+export interface WindowsResponse {
+  site: { id: string; label: string; lat_deg: number; lon_deg: number };
+  priority: "power" | "comms" | "both";
+  priority_text: string;
+  mission_days: number;
+  span_days: number;
+  step_minutes: number;
+  candidate_hours: number;
+  windows: WindowCandidate[];
+  worst: { start_utc: string; sun_fraction: number; earth_fraction: number; both_fraction: number };
+  series: { start_utc: string[]; sun_fraction: number[]; earth_fraction: number[]; both_fraction: number[] };
+  terrain: { applied: boolean; reason?: string; max_horizon_deg?: number; note?: string };
+  mode: "spice" | "synthetic";
+  resolution_note: string;
+  compute_time_ms: number;
+}
+
+export interface WindowsRequest {
+  site: { id: string; label: string; lat_deg: number; lon_deg: number };
+  start_utc: string;
+  span_days: number;
+  mission_days: number;
+  priority: "power" | "comms" | "both";
+  terrain: boolean;
+  mode: "spice" | "synthetic";
+  step_minutes?: number;
+  candidate_hours?: number;
+  top_k?: number;
+}
+
+export function postWindows(req: WindowsRequest, signal?: AbortSignal): Promise<WindowsResponse> {
+  return call<WindowsResponse>("/api/windows", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(req),
+    signal,
+  });
+}
+
+export interface TerrainStatus {
+  available: boolean;
+  source: string;
+  source_url: string;
+  coverage: string;
+  resolution_m: number;
+}
+
+export function fetchTerrainStatus(signal?: AbortSignal): Promise<TerrainStatus> {
+  return call<TerrainStatus>("/api/terrain/status", { signal });
+}

@@ -3,11 +3,12 @@
 import dynamic from "next/dynamic";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { ApiError, fetchHealth, fetchSites, postCompare } from "@/lib/api";
+import { ApiError, fetchHealth, fetchSites, fetchTerrainStatus, postCompare, type TerrainStatus } from "@/lib/api";
 import { fmtLatLon, parsePair } from "@/lib/coords";
 import { fmtDuration, fmtUtc } from "@/lib/format";
 import { CATEGORY_COLOR, type Site } from "@/lib/siteTypes";
 import type { BodyMetrics, CompareResponse, HealthResponse, IntervalOut, Mode, SiteResult } from "@/lib/types";
+import BestWindows from "./BestWindows";
 import HorizonView from "./HorizonView";
 import type { GlobeSite, GlobeView } from "./MoonGlobe";
 import { MethodsPanel } from "./Results";
@@ -134,6 +135,35 @@ function WindowStrip({ res, site, index, color, onSeek }: { res: CompareResponse
   );
 }
 
+// ------------------------------------------------------------------------------ share links
+
+/** #v=1&d=<days>&t=<0|1>&s=<lat>,<lon>,<start>,<name>|... (names URI-encoded). */
+function encodeHash(scenarios: Scenario[], days: number, terrain: boolean) {
+  const s = scenarios.map((x) => [x.lat, x.lon, x.start, encodeURIComponent(x.name)].join(",")).join("|");
+  return `#v=1&d=${days}&t=${terrain ? 1 : 0}&s=${s}`;
+}
+
+function decodeHash(hash: string): { scenarios: Scenario[]; days: number; terrain: boolean } | null {
+  try {
+    const q = new URLSearchParams(hash.replace(/^#/, ""));
+    if (q.get("v") !== "1" || !q.get("s")) return null;
+    const scenarios: Scenario[] = [];
+    for (const part of q.get("s")!.split("|").slice(0, 4)) {
+      const [lat, lon, start, name] = part.split(",");
+      const la = Number(lat);
+      const lo = Number(lon);
+      if (!Number.isFinite(la) || !Number.isFinite(lo) || Math.abs(la) > 90 || Math.abs(lo) > 360) continue;
+      if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(start ?? "")) continue;
+      scenarios.push({ key: newKey(), name: decodeURIComponent(name ?? "Shared site").slice(0, 64) || "Shared site", lat: la, lon: lo, start });
+    }
+    const d = Number(q.get("d"));
+    if (!scenarios.length) return null;
+    return { scenarios, days: Number.isFinite(d) && d >= 1 && d <= 60 ? d : LUNATION_D, terrain: q.get("t") !== "0" };
+  } catch {
+    return null;
+  }
+}
+
 // ------------------------------------------------------------------------------ main
 
 const DEFAULT_START = "2027-02-01T00:00";
@@ -165,12 +195,18 @@ export default function SiteNavigator({ active }: { active: boolean }) {
   const [pasteErr, setPasteErr] = useState<string | null>(null);
   const [showHelp, setShowHelp] = useState(false);
   const [showMethod, setShowMethod] = useState(false);
+  const [terrainStatus, setTerrainStatus] = useState<TerrainStatus | null>(null);
+  const [useTerrain, setUseTerrain] = useState(true);
+  const [copied, setCopied] = useState(false);
   const seq = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
   const autoRan = useRef(false);
 
   const step = stepChoice === "auto" ? autoStep(days) : stepChoice;
-  const reqKey = JSON.stringify({ scenarios: scenarios.map(({ key, lat, lon, start }) => [key, lat, lon, start]), days, step, mode });
+  const terrainOn = useTerrain && !!terrainStatus?.available;
+  const keyOf = (list: Scenario[], d: number, st: number, m: Mode, t: boolean) =>
+    JSON.stringify({ scenarios: list.map(({ key, lat, lon, start }) => [key, lat, lon, start]), days: d, step: st, mode: m, terrain: t });
+  const reqKey = keyOf(scenarios, days, step, mode, terrainOn);
   const stale = lastKey !== null && reqKey !== lastKey;
   const coverage = mode === "spice" && health ? [health.coverage_start_utc, health.coverage_end_utc] : null;
   const dateErrors = scenarios.map((s) => {
@@ -182,7 +218,11 @@ export default function SiteNavigator({ active }: { active: boolean }) {
   });
   const invalid = !scenarios.length || dateErrors.some(Boolean);
 
-  const run = useCallback(async (list: Scenario[], d: number, st: number, m: Mode, key: string) => {
+  const scenariosRef = useRef(scenarios);
+  useEffect(() => {
+    scenariosRef.current = scenarios;
+  }, [scenarios]);
+  const run = useCallback(async (list: Scenario[], d: number, st: number, m: Mode, t: boolean, key: string) => {
     abortRef.current?.abort();
     const ac = new AbortController();
     abortRef.current = ac;
@@ -199,7 +239,7 @@ export default function SiteNavigator({ active }: { active: boolean }) {
       [...groups.entries()].map(async ([start, ss]) => {
         try {
           const res = await postCompare(
-            { sites: ss.map((s) => ({ id: s.key, label: s.name.slice(0, 64), lat_deg: s.lat, lon_deg: s.lon })), start_utc: `${start}:00Z`, duration_hours: d * 24, step_minutes: st, mode: m },
+            { sites: ss.map((s) => ({ id: s.key, label: s.name.slice(0, 64), lat_deg: s.lat, lon_deg: s.lon })), start_utc: `${start}:00Z`, duration_hours: d * 24, step_minutes: st, mode: m, terrain: t },
             ac.signal,
           );
           for (const site of res.sites) next[site.id] = { site, res };
@@ -209,6 +249,11 @@ export default function SiteNavigator({ active }: { active: boolean }) {
       }),
     );
     if (my !== seq.current) return; // a newer comparison owns the view
+    try {
+      window.history.replaceState(null, "", encodeHash(list, d, t));
+    } catch {
+      /* sandboxed frames may block history updates */
+    }
     setOutcomes(next);
     setErrors(errs);
     setLastKey(key);
@@ -219,20 +264,29 @@ export default function SiteNavigator({ active }: { active: boolean }) {
 
   useEffect(() => {
     const ac = new AbortController();
-    fetchHealth(ac.signal)
-      .then((h) => {
+    const shared = decodeHash(window.location.hash);
+    Promise.all([fetchHealth(ac.signal), fetchTerrainStatus(ac.signal).catch(() => null)])
+      .then(([h, ts]) => {
         setHealth(h);
-        if (!autoRan.current) {
-          autoRan.current = true;
-          const m: Mode = h.spice_available ? "spice" : "synthetic";
-          setMode(m);
-          if (h.spice_available) run(scenarios, LUNATION_D, autoStep(LUNATION_D), m, JSON.stringify({ scenarios: scenarios.map(({ key, lat, lon, start }) => [key, lat, lon, start]), days: LUNATION_D, step: autoStep(LUNATION_D), mode: m }));
+        setTerrainStatus(ts);
+        if (autoRan.current) return;
+        autoRan.current = true;
+        const m: Mode = h.spice_available ? "spice" : "synthetic";
+        const list = shared?.scenarios ?? scenariosRef.current;
+        const d = shared?.days ?? LUNATION_D;
+        const t = (shared?.terrain ?? true) && !!ts?.available;
+        setMode(m);
+        if (shared) {
+          setScenarios(shared.scenarios);
+          setDays(shared.days);
+          setUseTerrain(shared.terrain);
+          setActiveKey(shared.scenarios[0].key);
         }
+        if (h.spice_available) run(list, d, autoStep(d), m, t, keyOf(list, d, autoStep(d), m, t));
       })
       .catch((e) => (e as Error).name !== "AbortError" && setHealthError((e as Error).message));
     fetchSites(ac.signal).then((c) => setCatalog(c.sites)).catch(() => undefined);
     return () => ac.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- initial load only
   }, [run]);
 
   useEffect(() => {
@@ -242,15 +296,11 @@ export default function SiteNavigator({ active }: { active: boolean }) {
   }, []);
 
   // ---- scenario edits
-  const scenariosRef = useRef(scenarios);
-  useEffect(() => {
-    scenariosRef.current = scenarios;
-  }, [scenarios]);
-  const addScenario = useCallback((name: string, lat: number, lon: number, siteId?: string) => {
+  const addScenario = useCallback((name: string, lat: number, lon: number, siteId?: string, start?: string) => {
     const list = scenariosRef.current;
     if (list.length >= 4) return;
     const key = newKey();
-    setScenarios([...list, { key, name, lat, lon, siteId, start: list[list.length - 1]?.start ?? DEFAULT_START }]);
+    setScenarios([...list, { key, name, lat, lon, siteId, start: start ?? list[list.length - 1]?.start ?? DEFAULT_START }]);
     setActiveKey(key);
   }, []);
   const update = (key: string, patch: Partial<Scenario>) => setScenarios((l) => l.map((s) => (s.key === key ? { ...s, ...patch } : s)));
@@ -387,6 +437,17 @@ export default function SiteNavigator({ active }: { active: boolean }) {
             ))}
           </div>
           <p className="text-[10.5px] text-faint">A lunar day (29.53 d) covers one full cycle of sunlight at any site.</p>
+          <label className={`flex items-start gap-2 rounded border px-2 py-1.5 text-[12px] ${terrainOn ? "border-[#a08060]/60 bg-[#3a2f26]/30" : "border-line"}`}>
+            <input type="checkbox" className="mt-0.5 accent-[var(--color-accent)]" checked={useTerrain} disabled={!terrainStatus?.available} onChange={(e) => setUseTerrain(e.target.checked)} />
+            <span>
+              Real terrain horizon <span className="text-faint">(NASA LOLA, 60°S to pole)</span>
+              <span className="block text-[10.5px] leading-snug text-faint">
+                {terrainStatus?.available
+                  ? "Crater walls and ridges block the Sun and Earth. Sites north of 60°S keep the ideal horizon."
+                  : "Terrain data not installed on the server (scripts/fetch_terrain.sh); using the ideal horizon."}
+              </span>
+            </span>
+          </label>
           <details className="text-[11.5px]">
             <summary className="cursor-pointer text-muted hover:text-text">Resolution &amp; data source</summary>
             <div className="mt-1.5 space-y-1.5">
@@ -404,8 +465,24 @@ export default function SiteNavigator({ active }: { active: boolean }) {
           </details>
         </section>
 
-        <button type="button" disabled={invalid || loading} onClick={() => run(scenarios, days, step, mode, reqKey)} className="w-full rounded-md bg-accent px-3 py-2 text-sm font-medium text-black hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40">
+        <button type="button" disabled={invalid || loading} onClick={() => run(scenarios, days, step, mode, terrainOn, reqKey)} className="w-full rounded-md bg-accent px-3 py-2 text-sm font-medium text-black hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40">
           {loading ? "Computing Sun & Earth positions…" : stale ? "3 · Update comparison" : "3 · Compare"}
+        </button>
+        <button
+          type="button"
+          disabled={!lastKey}
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(window.location.href);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1800);
+            } catch {
+              window.prompt("Copy this link:", window.location.href);
+            }
+          }}
+          className="w-full rounded-md border border-line px-3 py-1.5 text-[12px] text-muted hover:text-text disabled:opacity-40"
+        >
+          {copied ? "Link copied" : "Copy shareable link"}
         </button>
         {health && !health.spice_available && mode === "spice" && <p role="alert" className="text-[11.5px] text-sun">SPICE kernels are unavailable; switch to synthetic demo data under Resolution &amp; data source.</p>}
         {healthError && <p role="alert" className="text-[11.5px] text-danger">Backend unreachable: {healthError}</p>}
@@ -425,7 +502,7 @@ export default function SiteNavigator({ active }: { active: boolean }) {
           <div className={`${cardCls} grid gap-2 p-3 text-[12px] leading-snug text-muted sm:grid-cols-3`}>
             <p><span className="text-sun">Sunlight</span> = the Sun&apos;s centre is above an ideal, terrain-free horizon. It indicates solar-power potential, not actual panel output.</p>
             <p><span className="text-earth">Earth in view</span> = straight-line visibility of Earth, needed for direct-to-Earth radio. It is not a link budget, and relays are not modelled.</p>
-            <p><span className="text-text">Sky view</span>: zenith at the centre, horizon at the edge, north up. Near the poles the Sun and Earth skim the horizon, so real crater walls and ridges can block them.</p>
+            <p><span className="text-text">Sky view</span>: zenith at the centre, horizon at the edge, north up. With <span className="text-[#d8b892]">terrain</span> on, the brown silhouette is the real skyline from NASA LOLA heights: crater floors can be permanently dark, and high ground can see slightly <em>below</em> 0°, so visibility can go up as well as down.</p>
           </div>
         )}
         {synthetic && <p role="alert" className="text-[12px] text-sun">Synthetic demo geometry: not SPICE results and not NASA data.</p>}
@@ -461,6 +538,9 @@ export default function SiteNavigator({ active }: { active: boolean }) {
                       <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{ background: colorOf(s.key) }} /><span className="text-text">{letterOf(s.key)}</span></span>
                       <span className="block max-w-[150px] truncate text-[10.5px] font-normal text-faint" title={s.name}>{s.name}</span>
                       {!sameDate && <span className="block font-mono text-[9.5px] font-normal text-faint">{s.start.replace("T", " ")}</span>}
+                      <span className={`mt-0.5 inline-block rounded px-1 text-[9.5px] font-normal ${outcomes[s.key].site.terrain?.applied ? "bg-[#3a2f26] text-[#d8b892]" : "bg-panel-2 text-faint"}`} title={outcomes[s.key].site.terrain?.applied ? outcomes[s.key].site.terrain?.note : outcomes[s.key].site.terrain?.reason}>
+                        {outcomes[s.key].site.terrain?.applied ? "LOLA terrain" : "ideal horizon"}
+                      </span>
                     </th>
                   ))}
                 </tr>
@@ -489,7 +569,7 @@ export default function SiteNavigator({ active }: { active: boolean }) {
               </tbody>
             </table>
             <p className="mt-2 text-[10.5px] leading-snug text-faint">
-              “Best” is marked only when the lead exceeds the sampling tolerance and is not just a window-edge lower bound. Hover a metric for its meaning. Geometric visibility on an ideal horizon: no terrain, finite discs or eclipses.
+              “Best” is marked only when the lead exceeds the sampling tolerance and is not just a window-edge lower bound. Hover a metric for its meaning. Visibility is judged by the body&apos;s centre against the LOLA terrain horizon (south of 60°S, when on) or the ideal horizon; finite discs and eclipses are not modelled.
             </p>
           </section>
         )}
@@ -505,6 +585,16 @@ export default function SiteNavigator({ active }: { active: boolean }) {
             {sameDate ? <span className="font-mono text-[11.5px] tabular-nums text-muted">{fmtUtc(activeOut.res.timestamps_utc[i])}</span> : <span className="text-[10.5px] text-faint">different start dates: time shown from each window start</span>}
           </div>
         )}
+
+        {/* best landing dates */}
+        <BestWindows
+          sites={scenarios.map((x, k) => ({ key: x.key, letter: LETTERS[k], color: COLORS[k], name: x.name, lat: x.lat, lon: x.lon, start: x.start }))}
+          missionDays={Math.min(days, 60)}
+          terrain={terrainOn}
+          mode={mode}
+          canAdd={scenarios.length < 4}
+          onAdd={(site, start) => addScenario(`${site.name.replace(/ · .*$/, "")} · ${start.slice(0, 10)}`.slice(0, 64), site.lat, site.lon, undefined, start)}
+        />
 
         {/* sky views */}
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 2xl:grid-cols-4">

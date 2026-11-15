@@ -99,7 +99,7 @@ CONVENTIONS = {
 }
 
 LIMITATIONS = [
-    "No terrain: local topography, crater walls and distant ridges are ignored. At polar sites this dominates real illumination.",
+    "Terrain: by default the horizon is ideal (no topography). With the terrain option, sites south of 60°S use a horizon computed from the NASA LOLA 240 m polar DEM; features smaller than a few hundred metres, and terrain beyond the DEM edge or 300 km, are not included. Elsewhere the ideal horizon is used.",
     "Point-centre visibility: the finite discs of the Sun (~0.27 deg radius) and Earth (~0.95 deg radius) are not modelled; partial rising/setting counts by centre only.",
     "No eclipses: Earth occultation of the Sun (lunar eclipses) is not modelled, so 'sunlight' may include brief eclipse periods.",
     "Sunlight is geometric solar visibility, not electrical power: no panel orientation, efficiency, dust or thermal effects.",

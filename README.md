@@ -8,6 +8,9 @@ Compare two lunar landing sites by **geometric sunlight** and **direct-to-Earth 
 - Compare synchronized elevation timelines and refined visibility intervals, summary metrics, and plain-language findings.
 - Read the method, limitations, kernel provenance (with SHA-256), and export the full result as JSON.
 - **Site Navigator (default tab):** compare up to four scenarios (landing site + start date) side by side. Scorecards for **power** (sunlight share, longest night, peak Sun elevation) and **direct-to-Earth communication** (Earth-in-view share, longest blackout, peak Earth elevation), plus both together and a near-horizon terrain-sensitivity flag. A lit 3D globe, a local sky view per scenario and window strips stay synchronised with one time control. "Best" is marked only when the lead exceeds the sampling tolerance and is not a window-edge lower bound. Sites come from the verified catalogue, pasted coordinates or a globe click; "same site, half a lunar day later" compares dates. `POST /api/compare` now accepts 1–4 sites (the pairwise narrative is produced for exactly two).
+- **Real terrain horizons:** for sites from 60°S to the pole, visibility is judged against a horizon computed from the NASA LRO LOLA polar elevation model (`LDEM_60S_240M`, 240 m/pixel; `scripts/fetch_terrain.sh`). Sky views draw the terrain skyline. Example: the floor of Shackleton crater gets 0% sunlight with terrain (it is permanently shadowed) versus about 50% on an ideal horizon. See [Terrain](#terrain-horizons).
+- **Best landing dates:** scan up to a year for one site and rank landing dates for power, communications or both (`POST /api/windows`), then add any window to the comparison for refined numbers.
+- **Shareable links** encode the comparison in the URL; see [DEPLOY.md](DEPLOY.md) for Docker deployment and [docs/DEMO.md](docs/DEMO.md) for a two-minute demo script.
 - **Route simulator:** start anywhere on the Moon (typed N/S/E/W, pasted decimal degrees, globe pick, or a verified mission site) and get candidate routes to the geographic South Pole. A deterministic planning-waypoint network is generated automatically. See [Route simulator](#route-simulator-start-anywhere).
 - **Verified mission-site layer:** historical crewed and robotic landing sites and NASA's candidate Artemis III regions, each with a cited NASA/NSSDCA source. See [Site catalogue](#site-catalogue).
 - **Mission analyst:** a persistent, grounded chat drawer that answers follow-up questions from stored run data and project documentation. See [Mission analyst](#mission-analyst).
@@ -20,6 +23,10 @@ Prerequisites: [uv](https://docs.astral.sh/uv/) (it provisions Python 3.12), Nod
 
 ```bash
 ./scripts/fetch_kernels.sh
+```
+
+```bash
+./scripts/fetch_terrain.sh   # optional: NASA LOLA south-polar DEM (~120 MB) for terrain horizons
 ```
 
 ```bash
@@ -386,6 +393,13 @@ The existing time-expanded search, exposure integration, waiting/grid-alignment 
 **Run records.** Every computed route is stored as an immutable run (`run.run_id`, `input_hash`, `result_hash`) so the analyst can cite it later. `GET /api/runs/{run_id}` returns the stored request (`?full=1` includes the response).
 
 **Interface.** Globe-first console: compact start/destination/departure controls with everything else under Advanced; a floating playback bar (speed control; scrubbing moves the rover, UTC, lighting and the exposure chart together); Frame route and Follow rover; layer toggles (mission sites, planning waypoints, candidate network — hidden by default — and baseline); hover a route segment for its times and exposure, click it or an itinerary row to highlight it; idle / computing / success / infeasible / error / stale states, with stale requests aborted and late responses ignored. Animation honours `prefers-reduced-motion`. On narrow screens the globe stays on top with Plan / Results / Analyst tabs below.
+
+## Terrain horizons
+
+- **Data:** NASA LRO LOLA gridded elevation model `LDEM_60S_240M` (PDS dataset `LRO-L-LOLA-4-GDR-V1.0`): polar stereographic (spherical, true at the pole), 240 m/pixel, 60°S to the pole, heights relative to 1737.4 km in the Mean Earth/Polar Axis (DE421) frame. Downloaded by `scripts/fetch_terrain.sh` from the [PDS Geosciences Node](https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/) with a recorded SHA-256.
+- **Method:** for every 0.5° of azimuth, terrain points along the surface great circle out to 300 km (every 120 m out to 20 km, then logarithmically spaced) are looked up with bilinear interpolation. The elevation angle of each point from an observer 2 m above the surface is computed from exact 3D position vectors, so lunar curvature is exact. The horizon is the maximum along each ray. A body counts as visible when its centre is above the horizon at its azimuth; rise and set times are refined against that horizon to about 1 s.
+- **Validation (tests):** the projection orientation is checked against Shackleton crater (the centre must sit 3–5 km below its rim; measured 4.0 km, published about 4.2 km), the crater floor horizon exceeds 15°, the floor gets 0% sunlight over a lunar day with terrain, and sites outside the DEM are unchanged.
+- **Limits:** 240 m pixels smooth out small nearby relief. Rays stop at the DEM edge (60°S) or 300 km, and the fraction of truncated azimuths is reported per site (Chandrayaan-3 at 69°S: 12%). Sites north of 60°S use the ideal horizon and are labelled so. The route simulator still uses the ideal horizon.
 
 ## Site catalogue
 

@@ -41,6 +41,7 @@ class CompareRequest(BaseModel):
     duration_hours: float = Field(..., ge=config.MIN_DURATION_HOURS, le=config.MAX_DURATION_HOURS)
     step_minutes: float = Field(..., ge=config.MIN_STEP_MINUTES, le=config.MAX_STEP_MINUTES)
     mode: Literal["spice", "synthetic"] = "spice"
+    terrain: bool = Field(False, description="Use the LOLA terrain horizon where the south-polar DEM covers a site")
 
     @field_validator("start_utc")
     @classmethod
@@ -119,6 +120,8 @@ class SiteResult(BaseModel):
     masks: dict[str, list[bool]]  # sun, earth, both (sample-wise, elevation > 0)
     intervals: dict[str, list[IntervalOut]]  # sun, earth, both (refined)
     metrics: SiteMetrics
+    terrain: dict = Field(default_factory=lambda: {"applied": False},
+                          description="Terrain horizon used for this site (profile, source, limits) or why not")
 
 
 class SubPoints(BaseModel):

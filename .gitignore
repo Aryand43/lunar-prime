@@ -16,3 +16,6 @@ backend/.data/
 # Local secrets (never commit)
 .env
 backend/.env
+
+# LOLA terrain DEM (downloaded by scripts/fetch_terrain.sh)
+backend/terrain/

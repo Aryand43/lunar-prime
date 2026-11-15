@@ -16,6 +16,7 @@ export interface CompareRequest {
   duration_hours: number;
   step_minutes: number;
   mode: Mode;
+  terrain?: boolean;
 }
 
 export interface AzEl {
@@ -70,6 +71,24 @@ export interface SiteResult {
   masks: Record<Lane, boolean[]>;
   intervals: Record<Lane, IntervalOut[]>;
   metrics: SiteMetrics;
+  terrain?: TerrainInfo;
+}
+
+export interface TerrainInfo {
+  applied: boolean;
+  reason?: string;
+  source?: string;
+  source_url?: string;
+  resolution_m?: number;
+  observer_height_m?: number;
+  max_distance_km?: number;
+  site_height_m?: number;
+  max_horizon_deg?: number;
+  mean_horizon_deg?: number;
+  truncated_fraction?: number;
+  az_deg?: number[];
+  el_deg?: number[];
+  note?: string;
 }
 
 export interface Statement {

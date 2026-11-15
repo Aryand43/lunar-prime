@@ -19,6 +19,8 @@ from .routing import RoutingError
 from .routing_models import RouteRequest, RouteResponse
 from .routing_service import build_response
 from .service import ComputeError, run_compare
+from . import terrain
+from .windows import WindowsRequest, find_windows
 from . import chat_api
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -105,6 +107,10 @@ def compare(req: CompareRequest):
         return _error(422, "synthetic_disabled", _SYNTHETIC_DISABLED)
     else:
         provider = SyntheticProvider()
+    if req.terrain and terrain.available():
+        for s in req.sites:  # horizon profiles are pure NumPy: compute them before taking the SPICE lock
+            if terrain.covers(s.lat_deg):
+                terrain.horizon(round(s.lat_deg, 5), round(s.lon_deg, 5))
     try:
         with kernels.SPICE_LOCK:  # CSPICE is not thread-safe
             return run_compare(req, provider)
@@ -113,6 +119,36 @@ def compare(req: CompareRequest):
     except SpiceyError as exc:
         log.exception("SPICE error")
         return _error(500, "spice_error", f"SPICE computation failed: {exc.short or exc}")
+
+
+@app.post("/api/windows")
+def windows(req: WindowsRequest):
+    """Best landing windows for one site over a period (screening resolution; see resolution_note)."""
+    if req.mode == "spice":
+        if not kernels.STATUS.loaded:
+            return _error(503, "spice_unavailable", (kernels.STATUS.error or "SPICE kernels are not loaded.")
+                          + " Synthetic demo mode is available for UI development, but its results are not scientific.")
+        provider = SpiceProvider()
+    else:
+        provider = SyntheticProvider()
+    if req.terrain and terrain.available() and terrain.covers(req.site.lat_deg):
+        terrain.horizon(round(req.site.lat_deg, 5), round(req.site.lon_deg, 5))  # warm cache outside the lock
+    try:
+        with kernels.SPICE_LOCK:
+            return find_windows(req, provider)
+    except ComputeError as exc:
+        return _error(422, "invalid_request", str(exc))
+    except SpiceyError as exc:
+        log.exception("SPICE error")
+        return _error(500, "spice_error", f"SPICE computation failed: {exc.short or exc}")
+
+
+@app.get("/api/terrain/status")
+def terrain_status():
+    return dict(available=terrain.available(), source=terrain.SOURCE, source_url=terrain.SOURCE_URL,
+                coverage="60°S to the south pole", resolution_m=terrain.SCALE_M,
+                observer_height_m=terrain.OBSERVER_HEIGHT_M, max_distance_km=terrain.MAX_DISTANCE_KM,
+                sha256=terrain.dem_sha256())
 
 
 @app.get("/api/sites")

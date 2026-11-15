@@ -65,8 +65,22 @@ function stripTrack(az: number[], el: number[], W: number, H: number) {
   return d;
 }
 
-function Readout({ name, color, az, el }: { name: string; color: string; az: number; el: number }) {
-  const up = el > 0;
+/** Terrain horizon elevation at an azimuth (linear on the 0.5° grid), or 0 for the ideal horizon. */
+function makeHz(site: SiteResult) {
+  const t = site.terrain;
+  if (!t?.applied || !t.el_deg?.length) return null;
+  const el = t.el_deg;
+  const step = 360 / el.length;
+  return (az: number) => {
+    const a = (((az % 360) + 360) % 360) / step;
+    const i0 = Math.floor(a) % el.length;
+    const f = a - Math.floor(a);
+    return el[i0] * (1 - f) + el[(i0 + 1) % el.length] * f;
+  };
+}
+
+function Readout({ name, color, az, el, hz }: { name: string; color: string; az: number; el: number; hz: number | null }) {
+  const up = el > (hz ?? 0);
   return (
     <div className="flex items-baseline justify-between gap-2 text-xs">
       <span className="flex items-center gap-1.5">
@@ -77,8 +91,8 @@ function Readout({ name, color, az, el }: { name: string; color: string; az: num
         el <span className="text-text">{el >= 0 ? "+" : "−"}{Math.abs(el).toFixed(2)}°</span> · az{" "}
         <span className="text-text">{az.toFixed(1)}°</span> {compass(az)}
       </span>
-      <span className={`w-[70px] text-right text-[10px] uppercase tracking-wider ${up ? "text-text" : "text-faint"}`}>
-        {up ? "above" : "below"} hzn
+      <span className={`w-[78px] text-right text-[10px] uppercase tracking-wider ${up ? "text-text" : "text-faint"}`}>
+        {hz === null ? (up ? "above hzn" : "below hzn") : up ? "visible" : el > 0 ? "terrain-blocked" : "below hzn"}
       </span>
     </div>
   );
@@ -91,6 +105,7 @@ export default function HorizonView({ site, letter, index }: Props) {
   const W = 300;
   const H = 64;
   const i = Math.min(index, site.sun.az_deg.length - 1);
+  const hz = useMemo(() => makeHz(site), [site]);
   const sun = { az: site.sun.az_deg[i], el: site.sun.el_deg[i] };
   const earth = { az: site.earth.az_deg[i], el: site.earth.el_deg[i] };
 
@@ -100,13 +115,34 @@ export default function HorizonView({ site, letter, index }: Props) {
       skyEarth: skyTrack(site.earth.az_deg, site.earth.el_deg, R, c),
       stripSun: stripTrack(site.sun.az_deg, site.sun.el_deg, W, H),
       stripEarth: stripTrack(site.earth.az_deg, site.earth.el_deg, W, H),
+      skyTerrain: hz ? (() => {
+        let d = "";
+        for (let a = 0; a <= 360; a += 1) {
+          const [x, y] = skyXY(a, Math.max(0, hz(a)), R, c);
+          d += `${a ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`;
+        }
+        // close along the outer ring (counter-clockwise) to fill the ground
+        for (let a = 360; a >= 0; a -= 5) {
+          const [x, y] = skyXY(a, 0, R, c);
+          d += `L${x.toFixed(1)} ${y.toFixed(1)}`;
+        }
+        return d + "Z";
+      })() : "",
+      stripTerrain: hz ? (() => {
+        let d = `M0 ${H}`;
+        for (let a = 0; a <= 360; a += 1) {
+          const e = Math.max(-STRIP_LIM, Math.min(STRIP_LIM, hz(a)));
+          d += `L${((a / 360) * W).toFixed(1)} ${(H / 2 - (e / STRIP_LIM) * (H / 2)).toFixed(1)}`;
+        }
+        return d + `L${W} ${H}Z`;
+      })() : "",
     }),
-    [site, c],
+    [site, c, hz],
   );
 
   const body = (b: { az: number; el: number }, color: string, label: string) => {
     const [x, y] = skyXY(b.az, b.el, R, c);
-    const below = b.el <= 0;
+    const below = b.el <= (hz ? hz(b.az) : 0);
     return (
       <g>
         <circle cx={x} cy={y} r={5} fill={below ? "none" : color} stroke={color} strokeWidth={1.5} strokeDasharray={below ? "2 2" : undefined} />
@@ -157,6 +193,7 @@ export default function HorizonView({ site, letter, index }: Props) {
           ))}
           <text x={c + 3} y={c - (R * 60) / 90 + 9} fontSize={7} fill="#5d636c">30°</text>
           <text x={c + 3} y={c - (R * 30) / 90 + 9} fontSize={7} fill="#5d636c">60°</text>
+          {tracks.skyTerrain && <path d={tracks.skyTerrain} fill="#3a2f26" fillOpacity={0.85} stroke="#a08060" strokeWidth={0.8} fillRule="evenodd" />}
           <path d={tracks.skySun} fill="none" stroke={SUN} strokeOpacity={0.25} strokeWidth={1} />
           <path d={tracks.skyEarth} fill="none" stroke={EARTH} strokeOpacity={0.3} strokeWidth={1} />
           {body(earth, EARTH, "Earth")}
@@ -164,11 +201,12 @@ export default function HorizonView({ site, letter, index }: Props) {
         </svg>
         <div className="w-full">
           <div className="mb-1 flex justify-between text-[10px] text-faint">
-            <span>Near-horizon detail (±{STRIP_LIM}°)</span>
+            <span>Near-horizon detail (±{STRIP_LIM}°){hz && <span className="ml-1 text-[#c4a07a]">· brown = LOLA terrain</span>}</span>
             <span>azimuth →</span>
           </div>
           <svg viewBox={`0 0 ${W} ${H}`} className="w-full" preserveAspectRatio="none" role="img" aria-label="Elevation near the horizon versus azimuth">
             <rect x={0} y={H / 2} width={W} height={H / 2} fill="#121418" />
+            {tracks.stripTerrain && <path d={tracks.stripTerrain} fill="#3a2f26" fillOpacity={0.9} stroke="#a08060" strokeWidth={1} vectorEffect="non-scaling-stroke" />}
             <line x1={0} y1={H / 2} x2={W} y2={H / 2} stroke="#5d636c" strokeDasharray="2 2" />
             {[90, 180, 270].map((a) => (
               <line key={a} x1={(a / 360) * W} y1={0} x2={(a / 360) * W} y2={H} stroke="#1b1e23" />
@@ -183,8 +221,13 @@ export default function HorizonView({ site, letter, index }: Props) {
           </div>
         </div>
         <div className="w-full space-y-1 border-t border-line pt-2">
-          <Readout name="Sun" color={SUN} az={sun.az} el={sun.el} />
-          <Readout name="Earth" color={EARTH} az={earth.az} el={earth.el} />
+          <Readout name="Sun" color={SUN} az={sun.az} el={sun.el} hz={hz ? hz(sun.az) : null} />
+          <Readout name="Earth" color={EARTH} az={earth.az} el={earth.el} hz={hz ? hz(earth.az) : null} />
+          <p className="text-[10px] leading-snug text-faint">
+            {site.terrain?.applied
+              ? `Terrain horizon from NASA LOLA (240 m); max ${site.terrain.max_horizon_deg?.toFixed(1)}°${(site.terrain.max_horizon_deg ?? 0) > 0 && site.terrain.el_deg && Math.min(...site.terrain.el_deg) < 0 ? ", below 0° where the site looks down off high ground" : ""}.`
+              : site.terrain?.reason ?? "Ideal horizon (no terrain)."}
+          </p>
         </div>
       </div>
     </section>

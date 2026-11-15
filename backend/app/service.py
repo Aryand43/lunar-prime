@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 import numpy as np
 
-from . import analysis, config, kernels, narrative
+from . import analysis, config, kernels, narrative, terrain
 from .geometry import EphemerisProvider, enu_basis, site_vector, sub_point, topocentric_az_el
 from .models import (
     AzEl, BodyMetrics, Comparison, CompareRequest, CompareResponse, GapOut, IntervalOut,
@@ -30,6 +30,20 @@ def sample_times(et0: float, duration_s: float, step_s: float) -> np.ndarray:
     if et0 + duration_s - ets[-1] > 1e-6:
         ets = np.append(ets, et0 + duration_s)
     return ets
+
+
+def terrain_for(lat_deg: float, lon_deg: float, requested: bool):
+    """(Horizon or None, summary dict) for a site; never raises."""
+    if not requested:
+        return None, {"applied": False, "reason": "Ideal horizon (terrain not requested)."}
+    if not terrain.available():
+        return None, {"applied": False, "reason": "Terrain data not installed (run scripts/fetch_terrain.sh); "
+                                                  "ideal horizon used."}
+    if not terrain.covers(lat_deg):
+        return None, {"applied": False, "reason": "Outside the LOLA south-polar DEM (60°S to the pole); "
+                                                  "ideal horizon used."}
+    hz = terrain.horizon(round(lat_deg, 5), round(lon_deg, 5))
+    return hz, hz.summary()
 
 
 def run_compare(req: CompareRequest, provider: EphemerisProvider) -> CompareResponse:
@@ -71,17 +85,21 @@ def run_compare(req: CompareRequest, provider: EphemerisProvider) -> CompareResp
     for site in req.sites:
         r = site_vector(site.lat_deg, site.lon_deg)
         basis = enu_basis(site.lat_deg, site.lon_deg)
+        hz, terrain_info = terrain_for(site.lat_deg, site.lon_deg, req.terrain)
         series: dict[str, tuple[np.ndarray, np.ndarray]] = {}
         ivs: dict[str, list[tuple[float, float]]] = {}
         body_metrics: dict[str, BodyMetrics] = {}
         for body in config.BODIES:
             az, el, _ = topocentric_az_el(body_vecs[body], r, basis)
             series[body] = (az, el)
+            # Visibility is judged against the local horizon: the terrain profile when applied, else 0 deg.
+            clear = el - hz.at(az) if hz is not None else el
 
             def el_fn(t: float, body=body) -> float:
-                return float(topocentric_az_el(provider.body_vectors(body, np.array([t])), r, basis)[1][0])
+                a, e, _ = topocentric_az_el(provider.body_vectors(body, np.array([t])), r, basis)
+                return float(e[0] - (hz.at(a)[0] if hz is not None else 0.0))
 
-            iv, n_ref = analysis.visible_intervals(ets, el, el_fn, config.REFINE_TOLERANCE_S)
+            iv, n_ref = analysis.visible_intervals(ets, clear, el_fn, config.REFINE_TOLERANCE_S)
             n_refined_total += n_ref
             ivs[body] = iv
             g = analysis.longest_gap(iv, et0, et1)
@@ -97,12 +115,13 @@ def run_compare(req: CompareRequest, provider: EphemerisProvider) -> CompareResp
                 n_intervals=len(iv),
                 el_min_deg=round(float(el.min()), 4),
                 el_max_deg=round(float(el.max()), 4),
-                near_horizon_fraction=round(analysis.near_horizon_fraction(ets, el, config.NEAR_HORIZON_DEG), 4),
+                near_horizon_fraction=round(analysis.near_horizon_fraction(ets, clear, config.NEAR_HORIZON_DEG), 4),
             )
+            series[body] = (az, el, clear)
         ivs["both"] = analysis.intersect(ivs["sun"], ivs["earth"])
         both_s = analysis.total_duration(ivs["both"])
-        sun_mask = series["sun"][1] > 0
-        earth_mask = series["earth"][1] > 0
+        sun_mask = series["sun"][2] > 0
+        earth_mask = series["earth"][2] > 0
         site_results.append(SiteResult(
             id=site.id, label=site.label, lat_deg=site.lat_deg, lon_deg=site.lon_deg,
             position_me_km=_r(r, 3),
@@ -114,6 +133,7 @@ def run_compare(req: CompareRequest, provider: EphemerisProvider) -> CompareResp
                 sun=body_metrics["sun"], earth=body_metrics["earth"],
                 both_duration_s=round(both_s, 1), both_fraction=round(both_s / duration_s, 6),
             ),
+            terrain=terrain_info,
         ))
 
     if len(site_results) == 2:
