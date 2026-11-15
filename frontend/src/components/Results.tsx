@@ -102,6 +102,7 @@ export function MetricsTable({ result, explain = false }: { result: CompareRespo
                 <span className="mr-1.5 font-bold text-text">{k === 0 ? "A" : "B"}</span>
                 {s.label}
                 {result.metadata.starts_differ && <div className="text-text tabular-nums">from {fmtUtc(s.start_utc).slice(0, 16)} UTC</div>}
+                {Math.abs(s.lat_deg) >= 80 && <div className="text-[12px] text-muted">smooth sphere</div>}
               </th>
             ))}
           </tr>

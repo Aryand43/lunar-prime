@@ -90,5 +90,7 @@ export const PRESETS: SitePreset[] = [
   { key: "peary", label: "Peary crater, north pole", lat: 88.6, lon: 33.0, note: "North polar region; terrain ignored.", group: "Elsewhere on the Moon" },
 ];
 
-// The first screen compares two south-pole sites, which is what the challenge brief is about.
-export const DEFAULT_SITES = ["im2", "shackleton-rim"] as const;
+// The first screen compares two real CLPS landings at the south pole (the brief's focus).
+// The ridge and rim presets stay in the menu, but are not the default: their real sunlight depends on
+// terrain height, which the smooth-sphere model cannot show.
+export const DEFAULT_SITES = ["im2", "im1"] as const;
