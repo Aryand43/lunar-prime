@@ -15,3 +15,5 @@ __pycache__/
 
 # LOLA elevation and illumination maps from scripts/fetch_terrain.sh
 backend/terrain/
+
+.claude/
